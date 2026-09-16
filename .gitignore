@@ -1,0 +1,7 @@
+cat <<EOT >> .gitignore
+.streamlit/secrets.toml
+__pycache__/
+*.pyc
+.env
+.DS_Store
+EOT
