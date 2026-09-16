@@ -10,12 +10,12 @@ from typing import Literal
 st.set_page_config(page_title="Fantasy AI Scout", layout="wide")
 st.title("🏈 ESPN Fantasy Football AI Scout")
 
-# 2. ESPN Credentials & Global Constants
-LEAGUE_ID = st.secrets.get("LEAGUE_ID", 780112733)
-YEAR = st.secrets.get("YEAR", 2026)
-SWID = st.secrets.get("SWID", '{DFEC9D57-5D56-4DEB-AAAF-F5F81B257619}')
-ESPN_S2 = st.secrets.get("ESPN_S2", 'AEBPGUJOCb3XDob0ykxhbaie1mQ%2FDPzVnfbXWRgeiTtdZz%2Br0X6IGFgQhlLK19S2%2FWwEVRZtIZJTllkqLfgPzNspFKZr1pvDKF4%2B3dDQzcRN5KGJpRu7gfBO2q6Hs56QRzNbCteYRTfZeDb1Kc4ZGvQWJaoV8WBgC3clhFcPZWB%2FyMGqLZ3oc%2FcAJgUlMTHjXPDoaHQa2HWycjVdseG%2BY077g%2BZFc%2BybaErSk4KpbG78nlA5rv2oRoZyatirTOd4%2Fwu5%2B%2B8NaGT070JIId42Ds%2Fkc0EsO06RYejF787CFiYHUQ%3D%3D')
-API_KEY = st.secrets.get("GEMINI_API_KEY", "AQ.Ab8RN6I5Lz-K0fas97IEe5H9z8bGhaQ-Y7mm91N7jik0UB-lqA")
+# 2. ESPN & Gemini Credentials (Loaded from secrets)
+LEAGUE_ID = int(st.secrets["LEAGUE_ID"])
+YEAR = int(st.secrets["YEAR"])
+SWID = st.secrets["SWID"]
+ESPN_S2 = st.secrets["ESPN_S2"]
+API_KEY = st.secrets["GEMINI_API_KEY"]
 
 # 3. Cache and Load League Data
 @st.cache_resource(ttl=600)
