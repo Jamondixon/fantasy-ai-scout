@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 from espn_api.football import League
 from google import genai
 from google.genai import types
@@ -60,6 +61,24 @@ st.markdown("""
         letter-spacing: 0.5px;
     }
 
+    /* Expander Section Headers (Active Squad & Available Wire, Standings, etc.) */
+    div[data-testid="stExpander"] details summary p {
+        font-size: 0.95rem !important;
+        font-weight: 800 !important;
+        color: #0F172A !important;
+        letter-spacing: 0.3px !important;
+        text-transform: uppercase !important;
+    }
+
+    /* Grid Frame Sub-titles inside Cards */
+    .grid-frame div {
+        font-size: 0.85rem !important;
+        font-weight: 800 !important;
+        color: #334155 !important;
+        letter-spacing: 0.5px !important;
+        text-transform: uppercase !important;
+    }
+
     /* Bold Data Grid Framing & Shadows */
     .grid-frame {
         background: #FFFFFF;
@@ -70,6 +89,47 @@ st.markdown("""
         margin-bottom: 8px;
     }
 
+    /* Scrollable Container Wrapper */
+    .table-scroll-container {
+        max-height: 320px;
+        overflow-y: auto;
+        overflow-x: auto;
+        border: 1.5px solid #CBD5E1;
+        border-radius: 8px;
+        background: #FFFFFF;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    /* Sleeper Table with Sticky, Centered Headers and Values */
+    .sleeper-table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: center !important;
+    }
+    .sleeper-table th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #F8FAFC !important;
+        font-size: 0.85rem !important;
+        font-weight: 700 !important;
+        color: #334155 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+        padding: 10px 14px;
+        border-bottom: 2px solid #CBD5E1;
+        text-align: center !important;
+    }
+    .sleeper-table td {
+        font-size: 0.9rem;
+        color: #0F172A;
+        padding: 8px 14px;
+        border-bottom: 1px solid #E2E8F0;
+        text-align: center !important;
+    }
+    .sleeper-table tr:hover {
+        background-color: #F1F5F9;
+    }
     /* Sleeper Base Card */
     .sleeper-card {
         background: #F8FAFC;
@@ -78,6 +138,33 @@ st.markdown("""
         padding: 16px 20px;
         margin-bottom: 12px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+   /* Match Expander Modules (A, B, C) to .grid-frame */
+    div[data-testid="stExpander"] {
+        background: #FFFFFF !important;
+        border: 2px solid #94A3B8 !important;
+        border-radius: 10px !important;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.08) !important;
+        margin-bottom: 18px !important;
+        overflow: visible !important;
+    }
+
+    div[data-testid="stExpander"] details {
+        border: none !important;
+        background: transparent !important;
+        border-radius: 10px !important;
+    }
+
+    div[data-testid="stExpander"] details summary {
+        border-bottom: 2px solid #E2E8F0 !important;
+        padding: 14px 18px !important;
+        border-top-left-radius: 8px !important;
+        border-top-right-radius: 8px !important;
+    }
+
+    div[data-testid="stExpander"] div[data-testid="stExpanderDetails"] {
+        padding: 18px !important;
     }
 
     /* Sub-headers and Meta Labels */
@@ -218,7 +305,11 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 6. PERSISTENT BENCH & FREE AGENT PREVIEW (BOLD FRAMED) ---
+# =========================================================
+# 6. PERSISTENT LEAGUE MODULES (COLLAPSIBLE)
+# =========================================================
+
+# --- Module A: Squad & Wire Grids (Scrollable with Sticky Styled Headers) ---
 roster_rows = [
     {"Slot": getattr(p, "lineupSlot", "BE"), "Player": p.name, "Pos": p.position, "Total Pts": round(p.total_points, 1)}
     for p in my_team.roster
@@ -238,7 +329,14 @@ with st.expander("Active Squad & Available Wire", expanded=False):
             </div>
         </div>
         """, unsafe_allow_html=True)
-        st.dataframe(pd.DataFrame(roster_rows), use_container_width=True, hide_index=True)
+        df_roster = pd.DataFrame([
+            {"SLOT": getattr(p, "lineupSlot", "BE"), "PLAYER": p.name, "POS": p.position, "TOTAL PTS": f"{p.total_points:.1f}"}
+            for p in my_team.roster
+        ])
+        st.markdown(
+            f'<div class="table-scroll-container">{df_roster.to_html(classes="sleeper-table", index=False)}</div>',
+            unsafe_allow_html=True
+        )
 
     with col2:
         st.markdown("""
@@ -248,7 +346,69 @@ with st.expander("Active Squad & Available Wire", expanded=False):
             </div>
         </div>
         """, unsafe_allow_html=True)
-        st.dataframe(pd.DataFrame(fa_rows), use_container_width=True, hide_index=True)
+        df_fa = pd.DataFrame([
+            {"PLAYER": p.name, "POS": p.position, "TOTAL PTS": f"{p.total_points:.1f}"}
+            for p in free_agents
+        ])
+        st.markdown(
+            f'<div class="table-scroll-container">{df_fa.to_html(classes="sleeper-table", index=False)}</div>',
+            unsafe_allow_html=True
+        )
+
+# --- Module B: Matchup Scoreboard ---
+with st.expander(f"Weekly Matchup Scoreboard (Week {league.current_week})", expanded=False):
+    selected_week = st.slider("Select Matchup Week", min_value=1, max_value=18, value=int(league.current_week))
+    try:
+        box_scores = league.box_scores(week=selected_week)
+        col_m1, col_m2 = st.columns(2)
+        for idx, match in enumerate(box_scores):
+            target_col = col_m1 if idx % 2 == 0 else col_m2
+            with target_col:
+                st.markdown(f"""
+                <div class='sleeper-card' style='margin-bottom: 12px;'>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; border-bottom: 1px solid #E2E8F0;">
+                        <div>
+                            <span style="font-weight: 800; font-size: 15px; color: #0F172A;">{match.home_team.team_name}</span>
+                            <span style="font-size: 12px; color: #64748B; margin-left: 6px;">({match.home_team.wins}-{match.home_team.losses})</span>
+                        </div>
+                        <div style="font-size: 18px; font-weight: 800; color: #0F766E;">{match.home_score:.1f}</div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px;">
+                        <div>
+                            <span style="font-weight: 800; font-size: 15px; color: #0F172A;">{match.away_team.team_name}</span>
+                            <span style="font-size: 12px; color: #64748B; margin-left: 6px;">({match.away_team.wins}-{match.away_team.losses})</span>
+                        </div>
+                        <div style="font-size: 18px; font-weight: 800; color: #0F766E;">{match.away_score:.1f}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+    except Exception as err:
+        st.warning(f"Could not load box scores for Week {selected_week}: {err}")
+
+
+# --- Module C: League Standings (Scrollable with Sticky Styled Headers) ---
+with st.expander("Championship Standings", expanded=False):
+    standings_rows = []
+    sorted_teams = sorted(league.teams, key=lambda t: (getattr(t, 'standing', 99), -t.wins, -t.points_for))
+
+    for rank, t in enumerate(sorted_teams, start=1):
+        standings_rows.append({
+            "RANK": rank,
+            "TEAM": t.team_name,
+            "MANAGER": getattr(t, "owner", "Unknown"),
+            "W-L": f"{t.wins}-{t.losses}" + (f"-{t.ties}" if getattr(t, 'ties', 0) > 0 else ""),
+            "PF": f"{t.points_for:.1f}",
+            "PA": f"{t.points_against:.1f}",
+            "STREAK": f"{getattr(t, 'streak_type', '')} {getattr(t, 'streak_length', '')}"
+        })
+
+    df_standings = pd.DataFrame(standings_rows)
+    st.markdown(
+        f'<div class="table-scroll-container">{df_standings.to_html(classes="sleeper-table", index=False)}</div>',
+        unsafe_allow_html=True
+    )
+
+st.divider()
 
 # =========================================================
 # 7. PYDANTIC SCHEMAS & VERDICT PALETTES
@@ -526,122 +686,197 @@ elif active_page == "Trade Evaluator":
                     st.markdown(f"<div style='font-size: 14px; color: #334155; margin-bottom: 6px;'>• {risk}</div>", unsafe_allow_html=True)
 
 # =========================================================
-# PAGE 4: POSITIONAL SCARCITY
+# PAGE 4: POSITIONAL ECONOMY & LEAGUE MARKET
 # =========================================================
 elif active_page == "Positional Economy":
     st.markdown("<div class='section-title'>League Market Economics</div>", unsafe_allow_html=True)
-    st.markdown("<div class='meta-caption'>Point Distribution & Liquidity Analysis</div>", unsafe_allow_html=True)
+    st.markdown("<div class='meta-caption'>Asset Allocation, Efficiency, Market Velocity & Scarcity</div>", unsafe_allow_html=True)
 
-    all_player_data = []
-    for team in league.teams:
-        is_user_team = (team.team_name == my_team.team_name)
-        for p in team.roster:
-            all_player_data.append({
-                "Player": p.name,
-                "Position": p.position,
-                "Total Points": p.total_points,
-                "Team": team.team_name,
-                "Category": "Your Team" if is_user_team else "Rival Rosters"
+    # 4 Dedicated Tabs
+    tab_alloc, tab_efficiency, tab_liquidity, tab_scarcity = st.tabs([
+        "Asset Allocation", 
+        "Capital Productivity", 
+        "Waiver Liquidity",
+        "VORP Scarcity Curves"
+    ])
+
+    # ---------------------------------------------------------
+    # TAB 1: ASSET ALLOCATION (POSITION HOARDING)
+    # ---------------------------------------------------------
+    with tab_alloc:
+        st.markdown("<div class='meta-caption'>Positional Roster Share Per Franchise</div>", unsafe_allow_html=True)
+        
+        alloc_data = []
+        for t in league.teams:
+            pos_counts = {"QB": 0, "RB": 0, "WR": 0, "TE": 0, "K": 0, "D/ST": 0}
+            for p in t.roster:
+                pos = p.position if p.position in pos_counts else "WR"
+                pos_counts[pos] += 1
+            
+            for pos, count in pos_counts.items():
+                alloc_data.append({
+                    "Team": t.team_name,
+                    "Position": pos,
+                    "Count": count
+                })
+
+        df_alloc = pd.DataFrame(alloc_data)
+
+        import plotly.express as px
+        fig_alloc = px.bar(
+            df_alloc,
+            x="Count",
+            y="Team",
+            color="Position",
+            orientation="h",
+            color_discrete_map={
+                "QB": "#E11D48",
+                "RB": "#0F766E",
+                "WR": "#2563EB",
+                "TE": "#D97706",
+                "K": "#64748B",
+                "D/ST": "#475569"
+            }
+        )
+        fig_alloc.update_layout(
+            barmode="stack",
+            height=450,
+            margin=dict(l=10, r=10, t=25, b=10),
+            plot_bgcolor="#FFFFFF",
+            paper_bgcolor="#FFFFFF",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            xaxis=dict(showgrid=True, gridcolor="#F1F5F9", title="Total Rostered Players"),
+            yaxis=dict(title="")
+        )
+        st.plotly_chart(fig_alloc, use_container_width=True)
+
+    # ---------------------------------------------------------
+    # TAB 2: CAPITAL PRODUCTIVITY (STARTERS VS BENCH)
+    # ---------------------------------------------------------
+    with tab_efficiency:
+        st.markdown("<div class='meta-caption'>Points Extracted: Starters vs. Stranded Bench Capital</div>", unsafe_allow_html=True)
+
+        eff_rows = []
+        for t in league.teams:
+            starter_pts = sum(getattr(p, "total_points", 0) for p in t.roster if getattr(p, "lineupSlot", "BE") != "BE")
+            bench_pts = sum(getattr(p, "total_points", 0) for p in t.roster if getattr(p, "lineupSlot", "BE") == "BE")
+            total_pts = starter_pts + bench_pts
+            eff_rate = (starter_pts / total_pts * 100) if total_pts > 0 else 0
+
+            eff_rows.append({
+                "Team": t.team_name,
+                "Starter Pts": round(starter_pts, 1),
+                "Bench Pts": round(bench_pts, 1),
+                "Efficiency %": round(eff_rate, 1),
+                "Wins": t.wins
             })
 
-    for p in free_agents:
-        all_player_data.append({
-            "Player": p.name,
-            "Position": p.position,
-            "Total Points": p.total_points,
-            "Team": "Free Agency",
-            "Category": "Waiver Pool"
-        })
+        df_eff = pd.DataFrame(eff_rows)
 
-    df_all = pd.DataFrame(all_player_data)
-    core_positions = ["QB", "RB", "WR", "TE", "K", "D/ST"]
-    df_core = df_all[df_all["Position"].isin(core_positions)]
+        fig_eff = px.scatter(
+            df_eff,
+            x="Bench Pts",
+            y="Starter Pts",
+            size="Wins",
+            color="Efficiency %",
+            text="Team",
+            color_continuous_scale=["#CBD5E1", "#0F766E"]
+        )
+        fig_eff.update_traces(textposition='top center')
+        fig_eff.update_layout(
+            height=450,
+            plot_bgcolor="#FFFFFF",
+            paper_bgcolor="#FFFFFF",
+            xaxis=dict(showgrid=True, gridcolor="#F1F5F9", title="Stranded Bench Points"),
+            yaxis=dict(showgrid=True, gridcolor="#F1F5F9", title="Active Starting Points")
+        )
+        st.plotly_chart(fig_eff, use_container_width=True)
 
-    tab_charts, tab_ai = st.tabs(["Market Charts", "Scarcity Audit"])
+    # ---------------------------------------------------------
+    # TAB 3: WAIVER LIQUIDITY & ACQUISITION VELOCITY
+    # ---------------------------------------------------------
+    with tab_liquidity:
+        st.markdown("<div class='meta-caption'>Market Aggression: Moves Made vs. Offensive Output</div>", unsafe_allow_html=True)
 
-    with tab_charts:
-        col_chart1, col_chart2 = st.columns(2)
-        with col_chart1:
-            st.markdown("<div class='meta-caption'>Points Produced By Positional Tier</div>", unsafe_allow_html=True)
-            pts_by_pos = df_core.groupby(["Position", "Category"])["Total Points"].sum().unstack(fill_value=0)
-            st.bar_chart(pts_by_pos, use_container_width=True)
+        liq_rows = []
+        for t in league.teams:
+            moves = getattr(t, "acquisitions", 0)
+            trades = getattr(t, "trades", 0)
+            faab_spent = getattr(t, "faab_spent", 0)
+            liq_rows.append({
+                "Team": t.team_name,
+                "Acquisitions": moves,
+                "Trades": trades,
+                "Total Moves": moves + trades,
+                "FAAB Spent": faab_spent,
+                "Points For": round(t.points_for, 1),
+                "Wins": t.wins
+            })
 
-        with col_chart2:
-            st.markdown("<div class='meta-caption'>Average Player Yield By Tier</div>", unsafe_allow_html=True)
-            avg_by_pos = df_core.groupby(["Position", "Category"])["Total Points"].mean().unstack(fill_value=0).round(1)
-            st.area_chart(avg_by_pos, use_container_width=True)
+        df_liq = pd.DataFrame(liq_rows)
 
-        st.markdown("<div class='meta-caption'>Market Production Table</div>", unsafe_allow_html=True)
-        pos_summary = df_core.pivot_table(
-            index="Position",
-            columns="Category",
-            values="Total Points",
-            aggfunc=["count", "mean", "max"]
-        ).round(1)
-        st.dataframe(pos_summary, use_container_width=True)
+        # Bubble size reflects Wins, color maps to Total Moves
+        fig_liq = px.scatter(
+            df_liq,
+            x="Acquisitions",
+            y="Points For",
+            size="Wins",
+            color="Total Moves",
+            text="Team",
+            color_continuous_scale=["#94A3B8", "#0F766E"],
+            hover_data=["Trades", "FAAB Spent", "Wins"]
+        )
+        fig_liq.update_traces(textposition="top center")
+        fig_liq.update_layout(
+            height=450,
+            plot_bgcolor="#FFFFFF",
+            paper_bgcolor="#FFFFFF",
+            xaxis=dict(showgrid=True, gridcolor="#F1F5F9", title="Waiver Claims / Roster Adds"),
+            yaxis=dict(showgrid=True, gridcolor="#F1F5F9", title="Total Points For (PF)")
+        )
+        st.plotly_chart(fig_liq, use_container_width=True)
 
-    with tab_ai:
-        st.markdown("<div class='meta-caption'>Automated Inefficiency Detection</div>", unsafe_allow_html=True)
+    # ---------------------------------------------------------
+    # TAB 4: VORP SCARCITY CURVES
+    # ---------------------------------------------------------
+    with tab_scarcity:
+        st.markdown("<div class='meta-caption'>Positional Output Cliffs (Ranked 1-24)</div>", unsafe_allow_html=True)
 
-        @st.cache_data(show_spinner=False)
-        def run_scarcity_audit(summary_data, user_team_name):
-            client = genai.Client(api_key=API_KEY)
-            prompt = f"""
-            Analyze this league positional data from a quantitative market perspective:
-            {summary_data}
-            Focus on {user_team_name}'s tactical outlook.
-            Diagnose:
-            1. Positions experiencing severe market droughts vs waiver surpluses.
-            2. Concrete market inefficiencies {user_team_name} can exploit.
-            Tone: Analytical, direct, concise.
-            """
+        all_players = []
+        for t in league.teams:
+            for p in t.roster:
+                if p.position in ["QB", "RB", "WR", "TE"]:
+                    all_players.append({"Player": p.name, "Pos": p.position, "Pts": p.total_points})
 
-            response = client.models.generate_content(
-                model='gemini-3.5-flash',
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=ScarcityReport,
-                )
+        df_players = pd.DataFrame(all_players)
+        
+        ranked_frames = []
+        for pos in ["RB", "WR", "QB", "TE"]:
+            sub = df_players[df_players["Pos"] == pos].sort_values("Pts", ascending=False).reset_index(drop=True)
+            sub["Position Rank"] = sub.index + 1
+            ranked_frames.append(sub.head(24))
+
+        if ranked_frames:
+            df_vorp = pd.concat(ranked_frames)
+
+            fig_vorp = px.line(
+                df_vorp,
+                x="Position Rank",
+                y="Pts",
+                color="Pos",
+                line_shape="spline",
+                color_discrete_map={
+                    "QB": "#E11D48",
+                    "RB": "#0F766E",
+                    "WR": "#2563EB",
+                    "TE": "#D97706"
+                }
             )
-            return response.text
-
-        if st.button("Run Economy Audit"):
-            with st.spinner("Evaluating liquidity pools..."):
-                summary_dict = df_core.groupby(["Position", "Category"])["Total Points"].describe().round(1).to_dict()
-                report_json = run_scarcity_audit(str(summary_dict), my_team.team_name)
-                report = ScarcityReport.model_validate_json(report_json)
-
-            st.markdown(f"""
-            <div class='callout-box'>
-                <div style="font-weight: 800; color: #0F766E; margin-bottom: 2px;">EXECUTIVE AUDIT</div>
-                <div style="color: #1E293B;">{report.executive_summary}</div>
-                <div style="margin-top: 8px; font-weight: 700; color: #991B1B;">Tightest Market Squeeze: {report.hardest_position_to_acquire}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            for insight in report.insights:
-                tag_cfg = STATUS_TAGS.get(
-                    insight.status,
-                    {"bg": "#F8FAFC", "text": "#1E293B", "border": "#CBD5E1", "label": insight.status}
-                )
-
-                st.markdown(f"""
-                <div class='sleeper-card'>
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <span style="font-size: 15px; font-weight: 800; color: #0F172A;">{insight.position}</span>
-                        <span style="
-                            background: {tag_cfg['bg']};
-                            color: {tag_cfg['text']};
-                            border: 1.5px solid {tag_cfg['border']};
-                            padding: 3px 10px;
-                            border-radius: 4px;
-                            font-size: 11px;
-                            font-weight: 800;
-                            text-transform: uppercase;
-                            letter-spacing: 0.4px;
-                        ">{tag_cfg['label']}</span>
-                    </div>
-                    <div style="font-size: 14px; color: #334155; line-height: 1.55;">{insight.advice}</div>
-                </div>
-                """, unsafe_allow_html=True)
+            fig_vorp.update_layout(
+                height=420,
+                plot_bgcolor="#FFFFFF",
+                paper_bgcolor="#FFFFFF",
+                xaxis=dict(showgrid=True, gridcolor="#F1F5F9", title="Position Rank (Top 24)"),
+                yaxis=dict(showgrid=True, gridcolor="#F1F5F9", title="Total Points Scored")
+            )
+            st.plotly_chart(fig_vorp, use_container_width=True)

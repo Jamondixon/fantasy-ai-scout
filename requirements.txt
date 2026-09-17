@@ -3,3 +3,4 @@ pandas
 espn-api
 google-genai
 pydantic
+Plotly
