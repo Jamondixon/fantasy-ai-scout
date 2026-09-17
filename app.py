@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import requests
+import textwrap
 import plotly.express as px
 from espn_api.football import League
 from google import genai
@@ -214,6 +216,21 @@ st.markdown("""
         line-height: 1.55;
     }
 
+    /* Force high-specificity color for white cards in sidebar */
+    section[data-testid="stSidebar"] .nfl-game-card,
+    section[data-testid="stSidebar"] .nfl-game-card * {
+        color: #0F172A !important;
+    }
+
+    section[data-testid="stSidebar"] .nfl-game-header span {
+        color: #64748B !important;
+    }
+
+    section[data-testid="stSidebar"] .nfl-team-row.winner span {
+        color: #0F766E !important;
+        font-weight: 800 !important;
+    }
+
     /* Sidebar matching Run Waiver Analysis Button */
     section[data-testid="stSidebar"] {
         background-color: #0F766E !important;
@@ -239,9 +256,73 @@ st.markdown("""
         border-radius: 6px !important;
     }
 
+    /* Streak Status Badges */
+    .badge-win {
+        background-color: rgba(16, 185, 129, 0.15);
+        color: #059669;
+        font-weight: 800;
+        padding: 3px 8px;
+        border-radius: 4px;
+        border: 1px solid #10B981;
+        font-size: 0.8rem;
+        letter-spacing: 0.5px;
+    }
+    .badge-loss {
+        background-color: rgba(239, 68, 68, 0.15);
+        color: #DC2626;
+        font-weight: 800;
+        padding: 3px 8px;
+        border-radius: 4px;
+        border: 1px solid #EF4444;
+        font-size: 0.8rem;
+        letter-spacing: 0.5px;
+    }
+
     /* Subdued divider lines */
     section[data-testid="stSidebar"] hr {
         border-color: rgba(255, 255, 255, 0.2) !important;
+    }
+
+    /* High Specificity Force: White Background & Teal Text for Sidebar Cards */
+    section[data-testid="stSidebar"] div.nfl-game-card {
+        background-color: #FFFFFF !important;
+        background: #FFFFFF !important;
+        border: 2px solid #CBD5E1 !important;
+        border-radius: 8px !important;
+        padding: 10px 12px !important;
+        margin-bottom: 10px !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.15) !important;
+    }
+
+    section[data-testid="stSidebar"] div.nfl-game-card * {
+        background-color: transparent !important;
+        color: #0F766E !important;
+        -webkit-text-fill-color: #0F766E !important;
+    }
+
+    section[data-testid="stSidebar"] div.nfl-game-card .nfl-game-header {
+        display: flex !important;
+        justify-content: space-between !important;
+        font-size: 0.72rem !important;
+        font-weight: 800 !important;
+        text-transform: uppercase !important;
+        border-bottom: 1.5px solid #E2E8F0 !important;
+        padding-bottom: 4px !important;
+        margin-bottom: 6px !important;
+    }
+
+    section[data-testid="stSidebar"] div.nfl-game-card .nfl-team-row {
+        display: flex !important;
+        justify-content: space-between !important;
+        font-size: 0.88rem !important;
+        font-weight: 600 !important;
+        margin-bottom: 3px !important;
+    }
+
+    section[data-testid="stSidebar"] div.nfl-game-card .nfl-team-row.winner * {
+        font-weight: 900 !important;
+        color: #115E59 !important;
+        -webkit-text-fill-color: #115E59 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -273,6 +354,140 @@ except Exception as e:
 # =========================================================
 # 4. SIDEBAR NAVIGATION
 # =========================================================
+@st.cache_data(ttl=3600)
+def get_nfl_weather_map():
+    """
+    Fetches the current week's NFL scoreboard and maps each team abbreviation
+    to an HTML weather icon badge.
+    """
+    weather_map = {}
+    url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+    
+    try:
+        res = requests.get(url, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            for event in data.get("events", []):
+                comps = event.get("competitions", [{}])[0]
+                venue = comps.get("venue", {})
+                is_indoor = venue.get("indoor", False)
+
+                # Check weather text from competition or venue
+                weather_info = comps.get("weather", {})
+                display_text = weather_info.get("displayValue", "").lower()
+                temp = weather_info.get("temperature")
+
+                # Determine weather badge
+                if is_indoor:
+                    badge = '<span title="Indoor Dome / Retractable">🏟️ Dome</span>'
+                elif "snow" in display_text or "blizzard" in display_text:
+                    badge = '<span title="Snow">❄️ Snow</span>'
+                elif "rain" in display_text or "shower" in display_text or "drizzle" in display_text:
+                    badge = '<span title="Rain">🌧️ Rain</span>'
+                elif "cloud" in display_text or "overcast" in display_text:
+                    badge = '<span title="Cloudy">☁️ Cloud</span>'
+                elif "wind" in display_text:
+                    badge = '<span title="Windy">💨 Wind</span>'
+                else:
+                    # Default sunny/clear or temperature display
+                    temp_str = f" {temp}°F" if temp else ""
+                    badge = f'<span title="Clear/Sunny">☀️ Sun{temp_str}</span>'
+
+                # Map both home and away teams to this game's weather
+                for comp in comps.get("competitors", []):
+                    team_abbr = comp.get("team", {}).get("abbreviation")
+                    if team_abbr:
+                        weather_map[team_abbr.upper()] = badge
+    except Exception:
+        pass
+        
+    return weather_map
+
+@st.cache_data(ttl=300)
+def get_nfl_matchups_data():
+    """Fetches current week's NFL games from ESPN API for sidebar cards."""
+    url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+    games = []
+
+    try:
+        res = requests.get(url, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            for event in data.get("events", []):
+                comps = event.get("competitions", [{}])[0]
+                status_obj = event.get("status", {}).get("type", {})
+                
+                # Resilient game clock / schedule text (e.g. "Final", "Q2 10:14", "Sun 1:00 PM")
+                game_status = (
+                    status_obj.get("shortDetail") 
+                    or status_obj.get("detail") 
+                    or status_obj.get("description") 
+                    or "Scheduled"
+                )
+
+                # Competitors
+                competitors = comps.get("competitors", [])
+                away_comp = next((c for c in competitors if c.get("homeAway") == "away"), {})
+                home_comp = next((c for c in competitors if c.get("homeAway") == "home"), {})
+
+                # Abbreviation fallbacks
+                away_team = (
+                    away_comp.get("team", {}).get("abbreviation")
+                    or away_comp.get("team", {}).get("shortDisplayName")
+                    or "AWAY"
+                )
+                home_team = (
+                    home_comp.get("team", {}).get("abbreviation")
+                    or home_comp.get("team", {}).get("shortDisplayName")
+                    or "HOME"
+                )
+
+                # Scores (safely check for None and empty strings)
+                a_score = away_comp.get("score")
+                h_score = home_comp.get("score")
+                away_score = str(a_score) if a_score is not None and str(a_score).strip() != "" else "-"
+                home_score = str(h_score) if h_score is not None and str(h_score).strip() != "" else "-"
+
+                away_winner = bool(away_comp.get("winner", False))
+                home_winner = bool(home_comp.get("winner", False))
+
+                # Venue & Weather parsing
+                venue = comps.get("venue", {})
+                is_indoor = venue.get("indoor", False)
+                weather_info = comps.get("weather", {})
+                display_text = str(weather_info.get("displayValue", "")).lower()
+                temp = weather_info.get("temperature")
+                temp_display = f" {temp}°F" if temp is not None else ""
+
+                if is_indoor:
+                    wx_icon = "🏟️ Dome"
+                elif "snow" in display_text or "blizzard" in display_text:
+                    wx_icon = f"❄️{temp_display}".strip()
+                elif "rain" in display_text or "shower" in display_text or "drizzle" in display_text:
+                    wx_icon = f"🌧️{temp_display}".strip()
+                elif "cloud" in display_text or "overcast" in display_text:
+                    wx_icon = f"☁️{temp_display}".strip()
+                elif "wind" in display_text:
+                    wx_icon = f"💨{temp_display}".strip()
+                else:
+                    wx_icon = f"☀️{temp_display}".strip() or "☀️"
+
+                games.append({
+                    "status": game_status,
+                    "away_team": away_team,
+                    "home_team": home_team,
+                    "away_score": away_score,
+                    "home_score": home_score,
+                    "away_winner": away_winner,
+                    "home_winner": home_winner,
+                    "weather": wx_icon
+                })
+    except Exception as e:
+        # Fallback print for debugging in local terminal
+        print(f"Error fetching ESPN scoreboard: {e}")
+
+    return games
+
 with st.sidebar:
     st.markdown(f"### {league.settings.name}")
     st.caption(f"ESPN Season {YEAR} • {len(league.teams)} Clubs")
@@ -295,6 +510,41 @@ with st.sidebar:
         label_visibility="collapsed"
     )
 
+# --- Weekly NFL Matchups & Weather Cards ---
+    st.divider()
+    st.markdown("<div class='meta-caption' style='margin-bottom: 8px;'>Weekly NFL Matchups</div>", unsafe_allow_html=True)
+    
+    nfl_games = get_nfl_matchups_data()
+    
+    if nfl_games:
+        cards_list = []
+        for g in nfl_games:
+            away_win_class = "winner" if g["away_winner"] else ""
+            home_win_class = "winner" if g["home_winner"] else ""
+
+            card_html = f"""
+<div class="nfl-game-card">
+    <div class="nfl-game-header">
+        <span>{g['status']}</span>
+        <span>{g['weather']}</span>
+    </div>
+    <div class="nfl-team-row {away_win_class}">
+        <span>{g['away_team']}</span>
+        <span>{g['away_score']}</span>
+    </div>
+    <div class="nfl-team-row {home_win_class}">
+        <span>{g['home_team']}</span>
+        <span>{g['home_score']}</span>
+    </div>
+</div>
+"""
+            cards_list.append(textwrap.dedent(card_html).strip())
+
+        full_html = f'<div style="max-height: 480px; overflow-y: auto; padding-right: 4px;">{"".join(cards_list)}</div>'
+        st.markdown(full_html, unsafe_allow_html=True)
+    else:
+        st.caption("No NFL matchup data available right now.")
+
 # =========================================================
 # 5. DYNAMIC HERO TOP BAR
 # =========================================================
@@ -309,18 +559,14 @@ st.markdown(f"""
 # 6. PERSISTENT LEAGUE MODULES (COLLAPSIBLE)
 # =========================================================
 
-# --- Module A: Squad & Wire Grids (Scrollable with Sticky Styled Headers) ---
-roster_rows = [
-    {"Slot": getattr(p, "lineupSlot", "BE"), "Player": p.name, "Pos": p.position, "Total Pts": round(p.total_points, 1)}
-    for p in my_team.roster
-]
-fa_rows = [
-    {"Player": p.name, "Pos": p.position, "Total Pts": round(p.total_points, 1)}
-    for p in free_agents
-]
+# --- Module A: Squad & Wire Grids (Scrollable with Weather Icons) ---
+weather_map = get_nfl_weather_map()
+
+
 
 with st.expander("Active Squad & Available Wire", expanded=False):
     col1, col2 = st.columns(2)
+    
     with col1:
         st.markdown(f"""
         <div class="grid-frame">
@@ -329,12 +575,19 @@ with st.expander("Active Squad & Available Wire", expanded=False):
             </div>
         </div>
         """, unsafe_allow_html=True)
+        
         df_roster = pd.DataFrame([
-            {"SLOT": getattr(p, "lineupSlot", "BE"), "PLAYER": p.name, "POS": p.position, "TOTAL PTS": f"{p.total_points:.1f}"}
+            {
+                "SLOT": getattr(p, "lineupSlot", "BE"),
+                "PLAYER": p.name,
+                "POS": p.position,
+                "WX": weather_map.get(str(getattr(p, "proTeam", "")).upper(), "☀️"),
+                "TOTAL PTS": f"{p.total_points:.1f}"
+            }
             for p in my_team.roster
         ])
         st.markdown(
-            f'<div class="table-scroll-container">{df_roster.to_html(classes="sleeper-table", index=False)}</div>',
+            f'<div class="table-scroll-container">{df_roster.to_html(classes="sleeper-table", index=False, escape=False)}</div>',
             unsafe_allow_html=True
         )
 
@@ -346,12 +599,18 @@ with st.expander("Active Squad & Available Wire", expanded=False):
             </div>
         </div>
         """, unsafe_allow_html=True)
+        
         df_fa = pd.DataFrame([
-            {"PLAYER": p.name, "POS": p.position, "TOTAL PTS": f"{p.total_points:.1f}"}
+            {
+                "PLAYER": p.name,
+                "POS": p.position,
+                "WX": weather_map.get(str(getattr(p, "proTeam", "")).upper(), "☀️"),
+                "TOTAL PTS": f"{p.total_points:.1f}"
+            }
             for p in free_agents
         ])
         st.markdown(
-            f'<div class="table-scroll-container">{df_fa.to_html(classes="sleeper-table", index=False)}</div>',
+            f'<div class="table-scroll-container">{df_fa.to_html(classes="sleeper-table", index=False, escape=False)}</div>',
             unsafe_allow_html=True
         )
 
@@ -388,23 +647,62 @@ with st.expander(f"Weekly Matchup Scoreboard (Week {league.current_week})", expa
 
 # --- Module C: League Standings (Scrollable with Sticky Styled Headers) ---
 with st.expander("Championship Standings", expanded=False):
+    def get_manager_name(team):
+        """Extracts manager name reliably from ESPN API team object."""
+        owners = getattr(team, "owners", None)
+        if owners and isinstance(owners, list) and len(owners) > 0:
+            first_owner = owners[0]
+            if isinstance(first_owner, dict):
+                first = first_owner.get("firstName", "")
+                last = first_owner.get("lastName", "")
+                display = first_owner.get("displayName", "")
+                full = f"{first} {last}".strip()
+                return full if full else (display if display else "Manager")
+            elif isinstance(first_owner, str):
+                return first_owner
+        
+        for attr in ["owner", "primary_owner", "manager"]:
+            val = getattr(team, attr, None)
+            if val and isinstance(val, str):
+                return val
+                
+        return "Manager"
+
+    def format_streak(streak_type, streak_length):
+        """Returns colored badge HTML based on Win/Loss streak."""
+        st_type = str(streak_type).strip().upper()
+        length = str(streak_length).strip()
+        label = f"{st_type} {length}".strip()
+
+        if not label:
+            return "-"
+        
+        if "WIN" in st_type or st_type == "W":
+            return f'<span class="badge-win">{label}</span>'
+        elif "LOSS" in st_type or st_type == "L":
+            return f'<span class="badge-loss">{label}</span>'
+        return label
+
     standings_rows = []
     sorted_teams = sorted(league.teams, key=lambda t: (getattr(t, 'standing', 99), -t.wins, -t.points_for))
 
     for rank, t in enumerate(sorted_teams, start=1):
+        st_type = getattr(t, 'streak_type', '')
+        st_len = getattr(t, 'streak_length', '')
+
         standings_rows.append({
             "RANK": rank,
             "TEAM": t.team_name,
-            "MANAGER": getattr(t, "owner", "Unknown"),
+            "MANAGER": get_manager_name(t),
             "W-L": f"{t.wins}-{t.losses}" + (f"-{t.ties}" if getattr(t, 'ties', 0) > 0 else ""),
             "PF": f"{t.points_for:.1f}",
             "PA": f"{t.points_against:.1f}",
-            "STREAK": f"{getattr(t, 'streak_type', '')} {getattr(t, 'streak_length', '')}"
+            "STREAK": format_streak(st_type, st_len)
         })
 
     df_standings = pd.DataFrame(standings_rows)
     st.markdown(
-        f'<div class="table-scroll-container">{df_standings.to_html(classes="sleeper-table", index=False)}</div>',
+        f'<div class="table-scroll-container">{df_standings.to_html(classes="sleeper-table", index=False, escape=False)}</div>',
         unsafe_allow_html=True
     )
 
