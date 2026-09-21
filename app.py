@@ -338,6 +338,8 @@ SWID = st.secrets["SWID"]
 ESPN_S2 = st.secrets["ESPN_S2"]
 API_KEY = st.secrets["GEMINI_API_KEY"]
 
+# Google GenAI Client
+client = genai.Client(api_key=API_KEY)
 # =========================================================
 # 3. DATA LOADING & CACHING
 # =========================================================
@@ -904,6 +906,25 @@ STATUS_TAGS = {
     "SURPLUS_AVAILABLE": {"bg": "#ECFDF5", "text": "#065F46", "border": "#10B981", "label": "Surplus Wire"}
 }
 
+# ESPN official Pro Team ID mapping (overrides outdated package defaults)
+ESPN_PRO_TEAMS = {
+    0: "FA", 1: "ATL", 2: "BUF", 3: "CHI", 4: "CIN", 5: "CLE", 6: "DAL",
+    7: "DEN", 8: "DET", 9: "GB", 10: "TEN", 11: "IND", 12: "KC", 13: "LV",
+    14: "LAR", 15: "MIA", 16: "MIN", 17: "NE", 18: "NO", 19: "NYG", 20: "NYJ",
+    21: "PHI", 22: "ARI", 23: "PIT", 24: "LAC", 25: "SF", 26: "SEA", 27: "TB",
+    28: "WAS", 29: "CAR", 30: "JAX", 33: "BAL", 34: "HOU"
+}
+
+def get_player_team_abbr(player):
+    """Accurately resolves a player's real NFL team abbreviation."""
+    raw_team = getattr(player, "proTeam", "")
+    if isinstance(raw_team, int):
+        return ESPN_PRO_TEAMS.get(raw_team, "FA")
+    if str(raw_team).isdigit():
+        return ESPN_PRO_TEAMS.get(int(raw_team), "FA")
+    team_str = str(raw_team).strip().upper()
+    return team_str if team_str else "FA"
+
 # =========================================================
 # PAGE 1: WAIVER WIRE SCOUT
 # =========================================================
@@ -959,61 +980,226 @@ if active_page == "Waiver Wire Scout":
             """, unsafe_allow_html=True)
 
 # =========================================================
-# PAGE 2: START / SIT DEBATER
+# PAGE 2: START/SIT DEBATER
 # =========================================================
+
 elif active_page == "Start/Sit Debater":
-    st.markdown("<div class='section-title'>Head-to-Head Decision Engine</div>", unsafe_allow_html=True)
-    st.markdown("<div class='meta-caption'>Live Practice & Injury Grounded Analysis</div>", unsafe_allow_html=True)
+    st.markdown('<div class="hero-title">Start / Sit Debater</div>', unsafe_allow_html=True)
 
-    col_a, col_b = st.columns(2)
-    roster_names = [p.name for p in my_team.roster]
-    fa_names = [p.name for p in free_agents]
+    # Pre-build lookup dictionaries and labels
+    roster_players = my_team.roster
+    roster_options = {
+        f"{p.name} ({p.position} - {get_player_team_abbr(p)})": p 
+        for p in roster_players
+    }
+    roster_names = list(roster_options.keys())
 
-    with col_a:
-        player_a_name = st.selectbox("Club Option", roster_names)
-    with col_b:
-        player_b_name = st.selectbox("Wire Alternative", fa_names)
+    wire_options = {
+        f"{p.name} ({p.position} - {get_player_team_abbr(p)})": p 
+        for p in free_agents
+    }
+    wire_names = list(wire_options.keys())
 
-    player_a_obj = next(p for p in my_team.roster if p.name == player_a_name)
-    player_b_obj = next(p for p in free_agents if p.name == player_b_name)
+    # --- 2-Column Dilemma Interface ---
+    col_roster, col_wire = st.columns(2, gap="large")
 
-    if st.button(f"Analyze Matchup: {player_a_name} vs. {player_b_name}"):
-        with st.spinner("Scraping practice reports and injury feeds..."):
-            client = genai.Client(api_key=API_KEY)
+    chosen_p1, chosen_p2 = None, None
+    debate_trigger = False
+    debate_mode = ""
 
-            prompt = f"""
-            Head-to-head fantasy football debate between:
-            1. {player_a_name} ({player_a_obj.position}, {player_a_obj.total_points} total pts)
-            2. {player_b_name} ({player_b_obj.position}, {player_b_obj.total_points} total pts)
 
-            Instructions:
-            - Search for latest 2026 practice participation, injury alerts, and news.
-            - Compare touch volume, red-zone share, and defensive matchup.
-            - Provide a decisive final call with confidence rating.
-            - Tone: High-density, professional sports journalism. Zero robotic filler.
-            """
-
-            response = client.models.generate_content(
-                model='gemini-3.5-flash',
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    tools=[types.Tool(google_search=types.GoogleSearch())]
-                )
-            )
-
-        st.markdown(f"""
-        <div class='sleeper-card' style='margin-top: 16px; color: #0F172A; font-size: 14.5px;'>
-            {response.text}
+    # -------------------------------------------------------------
+    # Column 1: Roster vs Roster
+    # -------------------------------------------------------------
+    with col_roster:
+        st.markdown("""
+        <div style="background: #FFFFFF; border: 2px solid #CBD5E1; border-radius: 8px; padding: 18px; margin-bottom: 14px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);">
+            <div style="font-size: 16px; font-weight: 900; color: #0F172A; text-transform: uppercase; letter-spacing: 0.025em; margin-bottom: 6px;">
+                ⚔️ Roster vs Roster
+            </div>
+            <div style="font-size: 12.5px; font-weight: 600; color: #475569; margin-bottom: 4px;">
+                Compare two starters or bench options on your active squad.
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
-        grounding_metadata = response.candidates[0].grounding_metadata
-        if grounding_metadata and grounding_metadata.grounding_chunks:
-            with st.expander("Verified Beat Sources & Wire Reports"):
-                for chunk in grounding_metadata.grounding_chunks:
-                    if chunk.web:
-                        st.markdown(f"- [{chunk.web.title}]({chunk.web.uri})")
+        idx_p2 = 1 if len(roster_names) > 1 else 0
 
+        p1_r_name = st.selectbox(
+            "Primary Roster Option",
+            options=roster_names,
+            index=0,
+            key="r_vs_r_p1"
+        )
+        p2_r_name = st.selectbox(
+            "Alternative Roster Option",
+            options=roster_names,
+            index=idx_p2,
+            key="r_vs_r_p2"
+        )
+
+        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+        if st.button("⚖️ Debate Internal Roster", use_container_width=True, key="btn_debate_roster"):
+            if p1_r_name == p2_r_name:
+                st.warning("Please choose two different players to debate.")
+            else:
+                chosen_p1 = roster_options[p1_r_name]
+                chosen_p2 = roster_options[p2_r_name]
+                debate_trigger = True
+                debate_mode = "Roster vs Roster"
+
+    # -------------------------------------------------------------
+    # Column 2: Roster vs Waiver Wire
+    # -------------------------------------------------------------
+    with col_wire:
+        st.markdown("""
+        <div style="background: #FFFFFF; border: 2px solid #CBD5E1; border-radius: 8px; padding: 18px; margin-bottom: 14px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);">
+            <div style="font-size: 16px; font-weight: 900; color: #0F172A; text-transform: uppercase; letter-spacing: 0.025em; margin-bottom: 6px;">
+                🔄 Roster vs Waiver Wire
+            </div>
+            <div style="font-size: 12.5px; font-weight: 600; color: #475569; margin-bottom: 4px;">
+                Determine if a top free agent warrants starting over your current asset.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        p1_w_name = st.selectbox(
+            "Current Roster Player",
+            options=roster_names,
+            index=0,
+            key="r_vs_w_p1"
+        )
+        p2_w_name = st.selectbox(
+            "Available Wire Prospect",
+            options=wire_names,
+            index=0,
+            key="r_vs_w_p2"
+        )
+
+        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+        if st.button("🔍 Debate Wire Pivot", use_container_width=True, key="btn_debate_wire"):
+            chosen_p1 = roster_options[p1_w_name]
+            chosen_p2 = wire_options[p2_w_name]
+            debate_trigger = True
+            debate_mode = "Roster vs Waiver Wire"
+
+    # -------------------------------------------------------------
+    # Render AI Evaluation & Metrics on Trigger
+    # -------------------------------------------------------------
+    if debate_trigger and chosen_p1 and chosen_p2:
+        st.divider()
+        st.markdown(f"<div class='meta-caption'>Evaluation Matrix: {debate_mode}</div>", unsafe_allow_html=True)
+
+        # 1. Metric Cards Side-by-Side
+        m1, m2 = st.columns(2)
+        wx_map = get_nfl_weather_map()
+
+        p1_team = get_player_team_abbr(chosen_p1)
+        p2_team = get_player_team_abbr(chosen_p2)
+
+        with m1:
+            st.markdown(f"""
+            <div style="background: #FFFFFF; border: 1.5px solid #0F766E; border-radius: 8px; padding: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                <div style="font-size: 11px; font-weight: 800; color: #0F766E; text-transform: uppercase;">Option 1</div>
+                <div style="font-size: 18px; font-weight: 900; color: #0F172A; margin: 2px 0;">{chosen_p1.name}</div>
+                <div style="font-size: 13px; color: #64748B;">{chosen_p1.position} • {p1_team} | {wx_map.get(p1_team, '☀️ 70°F')}</div>
+                <div style="margin-top: 8px; font-size: 14px; font-weight: 700; color: #0F172A;">
+                    Season Pts: <span style="color: #0F766E;">{chosen_p1.total_points:.1f}</span> 
+                    &nbsp;|&nbsp; Proj: <span style="color: #0F766E;">{getattr(chosen_p1, 'projected_total_points', 0.0):.1f}</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with m2:
+            st.markdown(f"""
+            <div style="background: #FFFFFF; border: 1.5px solid #0F766E; border-radius: 8px; padding: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                <div style="font-size: 11px; font-weight: 800; color: #0F766E; text-transform: uppercase;">Option 2</div>
+                <div style="font-size: 18px; font-weight: 900; color: #0F172A; margin: 2px 0;">{chosen_p2.name}</div>
+                <div style="font-size: 13px; color: #64748B;">{chosen_p2.position} • {p2_team} | {wx_map.get(p2_team, '☀️ 70°F')}</div>
+                <div style="margin-top: 8px; font-size: 14px; font-weight: 700; color: #0F172A;">
+                    Season Pts: <span style="color: #0F766E;">{chosen_p2.total_points:.1f}</span> 
+                    &nbsp;|&nbsp; Proj: <span style="color: #0F766E;">{getattr(chosen_p2, 'projected_total_points', 0.0):.1f}</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<div style='margin-top: 16px;'></div>", unsafe_allow_html=True)
+
+        # 2. AI Recommendation Generation
+        with st.spinner(f"Analyzing match-up dynamics and weather conditions for {chosen_p1.name} vs {chosen_p2.name}..."):
+            try:
+                p1_wx = wx_map.get(p1_team, "Outdoor / Fair")
+                p2_wx = wx_map.get(p2_team, "Outdoor / Fair")
+
+                # Full team lookup for unmistakable AI grounding
+                team_names = {
+                    "PIT": "Pittsburgh Steelers", "SEA": "Seattle Seahawks",
+                    "CHI": "Chicago Bears", "GB": "Green Bay Packers",
+                    "KC": "Kansas City Chiefs", "BUF": "Buffalo Bills",
+                    "PHI": "Philadelphia Eagles", "DAL": "Dallas Cowboys",
+                    "SF": "San Francisco 49ers", "DET": "Detroit Lions",
+                    "MIA": "Miami Dolphins", "NYJ": "New York Jets",
+                    "BAL": "Baltimore Ravens", "CIN": "Cincinnati Bengals",
+                    "HOU": "Houston Texans", "IND": "Indianapolis Colts",
+                    "JAX": "Jacksonville Jaguars", "TEN": "Tennessee Titans",
+                    "DEN": "Denver Broncos", "LAC": "Los Angeles Chargers",
+                    "LV": "Las Vegas Raiders", "WAS": "Washington Commanders",
+                    "NYG": "New York Giants", "MIN": "Minnesota Vikings",
+                    "ATL": "Atlanta Falcons", "CAR": "Carolina Panthers",
+                    "NO": "New Orleans Saints", "TB": "Tampa Bay Buccaneers",
+                    "ARI": "Arizona Cardinals", "LAR": "Los Angeles Rams",
+                    "NE": "New England Patriots", "CLE": "Cleveland Browns"
+                }
+
+                p1_full_team = team_names.get(p1_team, p1_team)
+                p2_full_team = team_names.get(p2_team, p2_team)
+
+                prompt = f"""
+                You are an institutional fantasy football analyst for the active NFL season.
+                
+                CRITICAL ROSTER CONSTRAINTS:
+                - Treat player team assignments strictly as provided below. Do NOT use former teams or outdated prior-season affiliations.
+                - Candidate 1 plays for the {p1_full_team} ({p1_team}).
+                - Candidate 2 plays for the {p2_full_team} ({p2_team}).
+                
+                MATCHUP CONTEXT:
+                Dilemma Type: {debate_mode}
+                
+                Candidate 1: {chosen_p1.name}
+                - Position: {chosen_p1.position}
+                - Current NFL Franchise: {p1_full_team} ({p1_team})
+                - Total Season Fantasy Points: {chosen_p1.total_points}
+                - Projected Points: {getattr(chosen_p1, 'projected_total_points', 0.0):.1f}
+                - Venue & Weather: {p1_wx}
+                
+                Candidate 2: {chosen_p2.name}
+                - Position: {chosen_p2.position}
+                - Current NFL Franchise: {p2_full_team} ({p2_team})
+                - Total Season Fantasy Points: {chosen_p2.total_points}
+                - Projected Points: {getattr(chosen_p2, 'projected_total_points', 0.0):.1f}
+                - Venue & Weather: {p2_wx}
+                
+                Provide a structured, sharp evaluation:
+                1. **Definitive Start Recommendation**: Name the winner clearly.
+                2. **Ceiling vs. Floor Analysis**: Contrast their risk profiles within their respective current offensive systems.
+                3. **Weather & Environmental Factor**: How the venue/weather affects the game script.
+                Keep it punchy, quantitative, and formatted with clean markdown bullet points.
+                """
+                
+                # Model generation call
+                response = client.models.generate_content(
+                    model="gemini-3.5-flash",
+                    contents=prompt
+                )
+                
+                st.markdown(f"""
+                <div style="background: #F8FAFC; border: 1.5px solid #E2E8F0; border-left: 4px solid #0F766E; border-radius: 6px; padding: 16px; margin-top: 12px; color: #0F172A;">
+                    {response.text}
+                </div>
+                """, unsafe_allow_html=True)
+
+            except Exception as ex:
+                st.error(f"AI Debater Service Unavailable: {ex}")
 # =========================================================
 # PAGE 3: TRADE EVALUATOR
 # =========================================================
