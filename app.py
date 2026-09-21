@@ -8,6 +8,8 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 from typing import Literal
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 # =========================================================
 # 1. PAGE SETUP & THEME ENGINE
@@ -351,86 +353,220 @@ except Exception as e:
     st.error(f"League connection failed: {e}")
     st.stop()
 
+
 # =========================================================
-# 4. SIDEBAR NAVIGATION
+# 4. SIDEBAR NAVIGATION & MATCHUPS
 # =========================================================
-@st.cache_data(ttl=3600)
+
+def format_game_status_cst(event, status_obj):
+    """
+    Formats the game status/time to Central Time (CST/CDT) for scheduled games.
+    Preserves in-progress (e.g., 'Q2 08:31') and completed (e.g., 'Final') statuses.
+    """
+    state = status_obj.get("state", "").lower()
+    raw_status = (
+        status_obj.get("shortDetail")
+        or status_obj.get("detail")
+        or status_obj.get("description")
+        or "Scheduled"
+    )
+
+    # If the game is already live or finished, keep the clock/final status intact
+    if state in ["in", "post"] or any(k in raw_status.lower() for k in ["final", "end", "half", "delayed"]):
+        return raw_status
+
+    # For pre-game / scheduled matchups, parse the ISO date string to Central Time
+    date_str = event.get("date")
+    if date_str:
+        try:
+            # Normalize ISO string ending in Z to +00:00
+            if date_str.endswith("Z"):
+                date_str = date_str[:-1] + "+00:00"
+            
+            utc_dt = datetime.fromisoformat(date_str)
+            central_tz = ZoneInfo("America/Chicago")
+            central_dt = utc_dt.astimezone(central_tz)
+
+            # Formats as "Sun 12:00 PM CDT" or "Mon 7:15 PM CST"
+            # Remove leading zero on hour for macOS/Linux (-I)
+            time_part = central_dt.strftime("%-I:%M %p %Z")
+            day_part = central_dt.strftime("%a")
+            return f"{day_part} {time_part}"
+        except Exception:
+            pass
+
+    return raw_status
+
+@st.cache_data(ttl=1800)
 def get_nfl_weather_map():
     """
-    Fetches the current week's NFL scoreboard and maps each team abbreviation
-    to an HTML weather icon badge.
+    Builds an accurate weather badge mapping for all 32 NFL teams.
+    Checks ESPN live game feeds first, falls back to Open-Meteo for outdoor venues,
+    and automatically identifies domes.
     """
     weather_map = {}
     url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
-    
+    headers = {"User-Agent": "Mozilla/5.0"}
+
+    # Track which teams got resolved from ESPN
+    resolved_teams = set()
+
     try:
-        res = requests.get(url, timeout=5)
+        res = requests.get(url, headers=headers, timeout=5)
         if res.status_code == 200:
             data = res.json()
             for event in data.get("events", []):
                 comps = event.get("competitions", [{}])[0]
+                competitors = comps.get("competitors", [])
+
+                home_comp = next((c for c in competitors if c.get("homeAway") == "home"), {})
+                home_team = (
+                    home_comp.get("team", {}).get("abbreviation") 
+                    or home_comp.get("team", {}).get("shortDisplayName") 
+                    or ""
+                ).upper()
+
+                # Venue dome status
                 venue = comps.get("venue", {})
-                is_indoor = venue.get("indoor", False)
+                is_indoor = venue.get("indoor", False) or STADIUM_COORDS.get(home_team, (0, 0, False))[2]
 
-                # Check weather text from competition or venue
-                weather_info = comps.get("weather", {})
-                display_text = weather_info.get("displayValue", "").lower()
+                # Weather parsing
+                weather_info = comps.get("weather") or event.get("weather") or {}
+                display_text = str(weather_info.get("displayValue", "")).lower()
                 temp = weather_info.get("temperature")
+                temp_str = f" {temp}°F" if temp is not None else ""
 
-                # Determine weather badge
                 if is_indoor:
-                    badge = '<span title="Indoor Dome / Retractable">🏟️ Dome</span>'
-                elif "snow" in display_text or "blizzard" in display_text:
-                    badge = '<span title="Snow">❄️ Snow</span>'
-                elif "rain" in display_text or "shower" in display_text or "drizzle" in display_text:
-                    badge = '<span title="Rain">🌧️ Rain</span>'
-                elif "cloud" in display_text or "overcast" in display_text:
-                    badge = '<span title="Cloudy">☁️ Cloud</span>'
-                elif "wind" in display_text:
-                    badge = '<span title="Windy">💨 Wind</span>'
-                else:
-                    # Default sunny/clear or temperature display
-                    temp_str = f" {temp}°F" if temp else ""
+                    badge = '<span title="Indoor / Retractable Dome">🏟️ Dome</span>'
+                elif any(w in display_text for w in ["rain", "shower", "drizzle", "t-storm", "storm", "precip"]):
+                    badge = f'<span title="Rain">🌧️ Rain{temp_str}</span>'
+                elif any(w in display_text for w in ["snow", "blizzard", "flurries", "sleet", "ice"]):
+                    badge = f'<span title="Snow">❄️ Snow{temp_str}</span>'
+                elif any(w in display_text for w in ["cloud", "overcast", "fog", "haze"]):
+                    badge = f'<span title="Cloudy">☁️ Cloud{temp_str}</span>'
+                elif any(w in display_text for w in ["wind", "breezy"]):
+                    badge = f'<span title="Windy">💨 Wind{temp_str}</span>'
+                elif any(w in display_text for w in ["clear", "sunny", "fair"]):
                     badge = f'<span title="Clear/Sunny">☀️ Sun{temp_str}</span>'
+                elif temp is not None:
+                    badge = f'<span title="Temperature">🌡️ {temp}°F</span>'
+                else:
+                    # Fallback to stadium weather API
+                    badge = f'<span title="Live Venue">{get_live_venue_weather(home_team)}</span>'
 
-                # Map both home and away teams to this game's weather
-                for comp in comps.get("competitors", []):
-                    team_abbr = comp.get("team", {}).get("abbreviation")
-                    if team_abbr:
-                        weather_map[team_abbr.upper()] = badge
-    except Exception:
-        pass
-        
+                # Map to both competitors in this game
+                for comp in competitors:
+                    abbr = comp.get("team", {}).get("abbreviation", "").upper()
+                    if abbr:
+                        weather_map[abbr] = badge
+                        resolved_teams.add(abbr)
+    except Exception as e:
+        print(f"Weather map fetch error: {e}")
+
+    # Safety Fallback: Populate any teams on Bye or not yet scheduled
+    for team_abbr in STADIUM_COORDS.keys():
+        if team_abbr not in resolved_teams:
+            lat, lon, is_dome = STADIUM_COORDS[team_abbr]
+            if is_dome:
+                weather_map[team_abbr] = '<span title="Indoor Dome">🏟️ Dome</span>'
+            else:
+                weather_map[team_abbr] = f'<span title="Live Venue">{get_live_venue_weather(team_abbr)}</span>'
+
+    # Fallback for free agents with FA or empty team
+    weather_map["FA"] = '<span title="Free Agent / Bye">-</span>'
+    weather_map[""] = '<span title="Free Agent / Bye">-</span>'
+
     return weather_map
+
+# NFL Stadium coordinates for bulletproof live weather fallback
+STADIUM_COORDS = {
+    "ARI": (33.5276, -112.2626, True),   # State Farm Stadium (Dome)
+    "ATL": (33.7554, -84.4010, True),    # Mercedes-Benz Stadium (Dome)
+    "BAL": (39.2780, -76.6227, False),   # M&T Bank Stadium
+    "BUF": (42.7738, -78.7870, False),   # Highmark Stadium
+    "CAR": (35.2258, -80.8528, False),   # Bank of America Stadium
+    "CHI": (41.8623, -87.6167, False),   # Soldier Field
+    "CIN": (39.0955, -84.5161, False),   # Paycor Stadium
+    "CLE": (41.5061, -81.6995, False),   # Huntington Bank Field
+    "DAL": (32.7473, -97.0945, True),    # AT&T Stadium (Dome)
+    "DEN": (39.7439, -105.0201, False),  # Empower Field at Mile High
+    "DET": (42.3400, -83.0456, True),    # Ford Field (Dome)
+    "GB":  (44.5013, -88.0622, False),   # Lambeau Field
+    "HOU": (29.6847, -95.4107, True),    # NRG Stadium (Dome)
+    "IND": (39.7601, -86.1639, True),    # Lucas Oil Stadium (Dome)
+    "JAX": (30.3240, -81.6373, False),   # EverBank Stadium
+    "KC":  (39.0489, -94.4839, False),   # Arrowhead Stadium
+    "LV":  (36.0909, -115.1833, True),   # Allegiant Stadium (Dome)
+    "LAC": (33.9535, -118.3392, True),   # SoFi Stadium (Dome)
+    "LAR": (33.9535, -118.3392, True),   # SoFi Stadium (Dome)
+    "MIA": (25.9580, -80.2389, False),   # Hard Rock Stadium
+    "MIN": (44.9735, -93.2575, True),    # U.S. Bank Stadium (Dome)
+    "NE":  (42.0909, -71.2643, False),   # Gillette Stadium
+    "NO":  (29.9511, -90.0812, True),    # Caesars Superdome (Dome)
+    "NYG": (40.8128, -74.0742, False),   # MetLife Stadium
+    "NYJ": (40.8128, -74.0742, False),   # MetLife Stadium
+    "PHI": (39.9008, -75.1675, False),   # Lincoln Financial Field
+    "PIT": (40.4468, -80.0158, False),   # Acrisure Stadium
+    "SF":  (37.4033, -121.9694, False),  # Levi's Stadium
+    "SEA": (47.5952, -122.3316, False),  # Lumen Field
+    "TB":  (27.9759, -82.5033, False),   # Raymond James Stadium
+    "TEN": (36.1665, -86.7713, False),   # Nissan Stadium
+    "WAS": (38.9076, -76.8645, False),   # Northwest Stadium
+}
+
+def get_live_venue_weather(home_team_abbr):
+    """Fallback: Queries Open-Meteo for real-time temperature and condition code."""
+    venue_info = STADIUM_COORDS.get(home_team_abbr.upper())
+    if not venue_info:
+        return "☀️ 72°F"
+    lat, lon, is_dome = venue_info
+    if is_dome:
+        return "🏟️ Dome"
+
+    try:
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code&temperature_unit=fahrenheit"
+        r = requests.get(url, timeout=3).json().get("current", {})
+        temp = round(r.get("temperature_2m", 70))
+        code = r.get("weather_code", 0)
+
+        # WMO Weather interpretation codes
+        if code in [51, 53, 55, 61, 63, 65, 80, 81, 82]:
+            return f"🌧️ {temp}°F"
+        elif code in [71, 73, 75, 77, 85, 86]:
+            return f"❄️ {temp}°F"
+        elif code in [95, 96, 99]:
+            return f"⛈️ {temp}°F"
+        elif code in [1, 2, 3]:
+            return f"☁️ {temp}°F"
+        elif code in [45, 48]:
+            return f"🌫️ {temp}°F"
+        return f"☀️ {temp}°F"
+    except Exception:
+        return "☀️ 70°F"
+
 
 @st.cache_data(ttl=300)
 def get_nfl_matchups_data():
-    """Fetches current week's NFL games from ESPN API for sidebar cards."""
+    """Fetches the current week's NFL games and displays times in Central Time."""
     url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+    headers = {"User-Agent": "Mozilla/5.0"}
     games = []
 
     try:
-        res = requests.get(url, timeout=5)
+        res = requests.get(url, headers=headers, timeout=5)
         if res.status_code == 200:
             data = res.json()
             for event in data.get("events", []):
                 comps = event.get("competitions", [{}])[0]
                 status_obj = event.get("status", {}).get("type", {})
-                
-                # Resilient game clock / schedule text (e.g. "Final", "Q2 10:14", "Sun 1:00 PM")
-                game_status = (
-                    status_obj.get("shortDetail") 
-                    or status_obj.get("detail") 
-                    or status_obj.get("description") 
-                    or "Scheduled"
-                )
 
-                # Competitors
+                # --- Convert Game Time to Central Time ---
+                game_status = format_game_status_cst(event, status_obj)
+
                 competitors = comps.get("competitors", [])
                 away_comp = next((c for c in competitors if c.get("homeAway") == "away"), {})
                 home_comp = next((c for c in competitors if c.get("homeAway") == "home"), {})
 
-                # Abbreviation fallbacks
                 away_team = (
                     away_comp.get("team", {}).get("abbreviation")
                     or away_comp.get("team", {}).get("shortDisplayName")
@@ -442,7 +578,6 @@ def get_nfl_matchups_data():
                     or "HOME"
                 )
 
-                # Scores (safely check for None and empty strings)
                 a_score = away_comp.get("score")
                 h_score = home_comp.get("score")
                 away_score = str(a_score) if a_score is not None and str(a_score).strip() != "" else "-"
@@ -451,26 +586,31 @@ def get_nfl_matchups_data():
                 away_winner = bool(away_comp.get("winner", False))
                 home_winner = bool(home_comp.get("winner", False))
 
-                # Venue & Weather parsing
+                # Dome & Venue Weather Check
                 venue = comps.get("venue", {})
-                is_indoor = venue.get("indoor", False)
-                weather_info = comps.get("weather", {})
+                is_indoor = venue.get("indoor", False) or STADIUM_COORDS.get(home_team.upper(), (0, 0, False))[2]
+
+                weather_info = comps.get("weather") or event.get("weather") or {}
                 display_text = str(weather_info.get("displayValue", "")).lower()
                 temp = weather_info.get("temperature")
                 temp_display = f" {temp}°F" if temp is not None else ""
 
                 if is_indoor:
                     wx_icon = "🏟️ Dome"
-                elif "snow" in display_text or "blizzard" in display_text:
-                    wx_icon = f"❄️{temp_display}".strip()
-                elif "rain" in display_text or "shower" in display_text or "drizzle" in display_text:
+                elif any(w in display_text for w in ["rain", "shower", "drizzle", "t-storm", "storm", "precip"]):
                     wx_icon = f"🌧️{temp_display}".strip()
-                elif "cloud" in display_text or "overcast" in display_text:
+                elif any(w in display_text for w in ["snow", "blizzard", "flurries", "sleet", "ice"]):
+                    wx_icon = f"❄️{temp_display}".strip()
+                elif any(w in display_text for w in ["cloud", "overcast", "fog", "haze"]):
                     wx_icon = f"☁️{temp_display}".strip()
-                elif "wind" in display_text:
+                elif any(w in display_text for w in ["wind", "breezy"]):
                     wx_icon = f"💨{temp_display}".strip()
+                elif any(w in display_text for w in ["clear", "sunny", "fair"]):
+                    wx_icon = f"☀️{temp_display}".strip()
+                elif temp is not None:
+                    wx_icon = f"🌡️ {temp}°F"
                 else:
-                    wx_icon = f"☀️{temp_display}".strip() or "☀️"
+                    wx_icon = get_live_venue_weather(home_team)
 
                 games.append({
                     "status": game_status,
@@ -483,8 +623,7 @@ def get_nfl_matchups_data():
                     "weather": wx_icon
                 })
     except Exception as e:
-        # Fallback print for debugging in local terminal
-        print(f"Error fetching ESPN scoreboard: {e}")
+        print(f"ESPN Matchups fetch error: {e}")
 
     return games
 
@@ -499,6 +638,7 @@ with st.sidebar:
     st.divider()
 
     st.markdown("<div class='meta-caption'>Workspace</div>", unsafe_allow_html=True)
+
     active_page = st.radio(
         "Navigation",
         options=[
@@ -510,12 +650,12 @@ with st.sidebar:
         label_visibility="collapsed"
     )
 
-# --- Weekly NFL Matchups & Weather Cards ---
+    # --- Weekly NFL Matchups & Weather Cards ---
     st.divider()
     st.markdown("<div class='meta-caption' style='margin-bottom: 8px;'>Weekly NFL Matchups</div>", unsafe_allow_html=True)
-    
+
     nfl_games = get_nfl_matchups_data()
-    
+
     if nfl_games:
         cards_list = []
         for g in nfl_games:
@@ -544,7 +684,6 @@ with st.sidebar:
         st.markdown(full_html, unsafe_allow_html=True)
     else:
         st.caption("No NFL matchup data available right now.")
-
 # =========================================================
 # 5. DYNAMIC HERO TOP BAR
 # =========================================================
@@ -562,7 +701,11 @@ st.markdown(f"""
 # --- Module A: Squad & Wire Grids (Scrollable with Weather Icons) ---
 weather_map = get_nfl_weather_map()
 
-
+def resolve_player_wx(player):
+    """Safely retrieves weather badge by player proTeam abbreviation."""
+    raw_team = getattr(player, "proTeam", "")
+    team_str = str(raw_team).strip().upper()
+    return weather_map.get(team_str, "☀️ 70°F")
 
 with st.expander("Active Squad & Available Wire", expanded=False):
     col1, col2 = st.columns(2)
@@ -581,7 +724,8 @@ with st.expander("Active Squad & Available Wire", expanded=False):
                 "SLOT": getattr(p, "lineupSlot", "BE"),
                 "PLAYER": p.name,
                 "POS": p.position,
-                "WX": weather_map.get(str(getattr(p, "proTeam", "")).upper(), "☀️"),
+                "TEAM": getattr(p, "proTeam", "-").upper(),
+                "WX": resolve_player_wx(p),
                 "TOTAL PTS": f"{p.total_points:.1f}"
             }
             for p in my_team.roster
@@ -604,7 +748,8 @@ with st.expander("Active Squad & Available Wire", expanded=False):
             {
                 "PLAYER": p.name,
                 "POS": p.position,
-                "WX": weather_map.get(str(getattr(p, "proTeam", "")).upper(), "☀️"),
+                "TEAM": getattr(p, "proTeam", "-").upper(),
+                "WX": resolve_player_wx(p),
                 "TOTAL PTS": f"{p.total_points:.1f}"
             }
             for p in free_agents
@@ -613,7 +758,6 @@ with st.expander("Active Squad & Available Wire", expanded=False):
             f'<div class="table-scroll-container">{df_fa.to_html(classes="sleeper-table", index=False, escape=False)}</div>',
             unsafe_allow_html=True
         )
-
 # --- Module B: Matchup Scoreboard ---
 with st.expander(f"Weekly Matchup Scoreboard (Week {league.current_week})", expanded=False):
     selected_week = st.slider("Select Matchup Week", min_value=1, max_value=18, value=int(league.current_week))
