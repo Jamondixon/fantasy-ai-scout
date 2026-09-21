@@ -699,6 +699,89 @@ st.markdown(f"""
 # =========================================================
 # 6. PERSISTENT LEAGUE MODULES (COLLAPSIBLE)
 # =========================================================
+def get_player_team_abbr(player):
+    """Accurately resolves a player's real NFL team abbreviation."""
+    raw_team = getattr(player, "proTeam", "")
+    if isinstance(raw_team, int):
+        return ESPN_PRO_TEAMS.get(raw_team, "FA")
+    if str(raw_team).isdigit():
+        return ESPN_PRO_TEAMS.get(int(raw_team), "FA")
+    team_str = str(raw_team).strip().upper()
+    return team_str if team_str else "FA"
+
+def get_weekly_projected_points(player, week_num):
+    """
+    Extracts the player's weekly projected fantasy points from espn-api.
+    Checks player.stats[week_num]['projected_points'], then player.projected_points.
+    """
+    stats_dict = getattr(player, "stats", {})
+    if isinstance(stats_dict, dict) and week_num in stats_dict:
+        week_stat = stats_dict[week_num]
+        if isinstance(week_stat, dict) and "projected_points" in week_stat:
+            return float(week_stat["projected_points"])
+    
+    # Fallback if espn-api unpacked the current matchup directly onto player.projected_points
+    direct_proj = getattr(player, "projected_points", None)
+    if direct_proj is not None and direct_proj > 0.0:
+        return float(direct_proj)
+        
+    return 0.0
+
+# --- Build Roster Table Rows ---
+weather_map = get_nfl_weather_map()
+
+roster_rows = []
+for p in my_team.roster:
+    team_abbr = get_player_team_abbr(p)
+    wx_badge = weather_map.get(team_abbr, "☀️ 70°F")
+    slot = getattr(p, "lineupSlot", "BE")
+    
+    # Projected and Total Points
+    proj_val = getattr(p, "projected_points", None)
+    if proj_val is None:
+        proj_val = getattr(p, "projected_total_points", 0.0)
+    proj_pts = f"{float(proj_val):.1f}"
+    
+    total_pts = f"{getattr(p, 'total_points', 0.0):.1f}"
+    
+    row_html = f"""
+    <tr>
+        <td style="font-weight: 700; color: #0F766E;">{slot}</td>
+        <td style="font-weight: 600; color: #0F172A;">{p.name}</td>
+        <td>{p.position}</td>
+        <td>{team_abbr}</td>
+        <td>{wx_badge}</td>
+        <td style="text-align: right; font-weight: 600; color: #0F766E;">{proj_pts}</td>
+        <td style="text-align: right; font-weight: 700; color: #0F172A;">{total_pts}</td>
+    </tr>
+    """
+    roster_rows.append(row_html)
+
+# --- Build Free Agent Table Rows ---
+fa_rows = []
+for p in free_agents:
+    team_abbr = get_player_team_abbr(p)
+    wx_badge = weather_map.get(team_abbr, "-")
+    
+    # Projected and Total Points
+    proj_val = getattr(p, "projected_points", None)
+    if proj_val is None:
+        proj_val = getattr(p, "projected_total_points", 0.0)
+    proj_pts = f"{float(proj_val):.1f}"
+    
+    total_pts = f"{getattr(p, 'total_points', 0.0):.1f}"
+    
+    row_html = f"""
+    <tr>
+        <td style="font-weight: 600; color: #0F172A;">{p.name}</td>
+        <td>{p.position}</td>
+        <td>{team_abbr}</td>
+        <td>{wx_badge}</td>
+        <td style="text-align: right; font-weight: 600; color: #0F766E;">{proj_pts}</td>
+        <td style="text-align: right; font-weight: 700; color: #0F172A;">{total_pts}</td>
+    </tr>
+    """
+    fa_rows.append(row_html)
 
 # --- Module A: Squad & Wire Grids (Scrollable with Weather Icons) ---
 weather_map = get_nfl_weather_map()
@@ -726,9 +809,10 @@ with st.expander("Active Squad & Available Wire", expanded=False):
                 "SLOT": getattr(p, "lineupSlot", "BE"),
                 "PLAYER": p.name,
                 "POS": p.position,
-                "TEAM": getattr(p, "proTeam", "-").upper(),
+                "TEAM": get_player_team_abbr(p),
                 "WX": resolve_player_wx(p),
-                "TOTAL PTS": f"{p.total_points:.1f}"
+                "PROJ": f"{get_weekly_projected_points(p, league.current_week):.1f}",
+                "TOTAL PTS": f"{getattr(p, 'total_points', 0.0):.1f}"
             }
             for p in my_team.roster
         ])
@@ -750,9 +834,10 @@ with st.expander("Active Squad & Available Wire", expanded=False):
             {
                 "PLAYER": p.name,
                 "POS": p.position,
-                "TEAM": getattr(p, "proTeam", "-").upper(),
+                "TEAM": get_player_team_abbr(p),
                 "WX": resolve_player_wx(p),
-                "TOTAL PTS": f"{p.total_points:.1f}"
+                "PROJ": f"{get_weekly_projected_points(p, league.current_week):.1f}",
+                "TOTAL PTS": f"{getattr(p, 'total_points', 0.0):.1f}"
             }
             for p in free_agents
         ])
@@ -915,15 +1000,7 @@ ESPN_PRO_TEAMS = {
     28: "WAS", 29: "CAR", 30: "JAX", 33: "BAL", 34: "HOU"
 }
 
-def get_player_team_abbr(player):
-    """Accurately resolves a player's real NFL team abbreviation."""
-    raw_team = getattr(player, "proTeam", "")
-    if isinstance(raw_team, int):
-        return ESPN_PRO_TEAMS.get(raw_team, "FA")
-    if str(raw_team).isdigit():
-        return ESPN_PRO_TEAMS.get(int(raw_team), "FA")
-    team_str = str(raw_team).strip().upper()
-    return team_str if team_str else "FA"
+
 
 # =========================================================
 # PAGE 1: WAIVER WIRE SCOUT
@@ -944,14 +1021,16 @@ if active_page == "Waiver Wire Scout":
             """
 
             response = client.models.generate_content(
-                model='gemini-3.5-flash',
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=ScoutReport,
-                )
+            model='gemini-3.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=ScoutReport,
+                tools=[],
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
             )
-            report = ScoutReport.model_validate_json(response.text)
+        )
+        report = ScoutReport.model_validate_json(response.text)
 
         st.markdown(f"""
         <div class='callout-box'>
@@ -1187,10 +1266,9 @@ elif active_page == "Start/Sit Debater":
                 """
                 
                 # Model generation call
-                response = client.models.generate_content(
-                    model="gemini-3.5-flash",
-                    contents=prompt
-                )
+                chat = client.chats.create(model="gemini-3.5-flash")
+                response = chat.send_message(prompt)
+                output_text = response.text
                 
                 st.markdown(f"""
                 <div style="background: #F8FAFC; border: 1.5px solid #E2E8F0; border-left: 4px solid #0F766E; border-radius: 6px; padding: 16px; margin-top: 12px; color: #0F172A;">
@@ -1245,6 +1323,8 @@ elif active_page == "Trade Evaluator":
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=TradeEvaluation,
+                tools=[],
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
             )
         )
         return response.text
