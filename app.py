@@ -1111,6 +1111,68 @@ with st.expander("Championship Standings", expanded=False):
         unsafe_allow_html=True
     )
 
+    # --- Module D: Recent League Activity (Adds, Drops & Trades) ---
+with st.expander("Recent League Activity", expanded=False):
+    def format_activity_badge(action_type):
+        """Returns colored status badge for waiver/roster transaction types."""
+        act = str(action_type).strip().upper()
+        if "ADD" in act or "CLAIMED" in act:
+            return f'<span class="badge-win" style="background-color: rgba(15, 118, 110, 0.15); color: #0F766E; border: 1px solid #0F766E; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.75rem;">ADDED</span>'
+        elif "DROP" in act or "WAIVED" in act:
+            return f'<span class="badge-loss" style="background-color: rgba(225, 29, 72, 0.15); color: #E11D48; border: 1px solid #E11D48; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.75rem;">DROPPED</span>'
+        elif "TRADE" in act:
+            return f'<span style="background-color: rgba(37, 99, 235, 0.15); color: #2563EB; border: 1px solid #2563EB; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.75rem;">TRADED</span>'
+        return f'<span style="color: #64748B; font-size: 0.75rem;">{act}</span>'
+
+    activity_rows = []
+    
+    try:
+        # Fetch up to 25 recent transactions from ESPN API
+        recent_activities = league.recent_activity(size=25)
+        for act in recent_activities:
+            # Timestamp conversion (milliseconds to readable CST string)
+            date_display = "-"
+            raw_date = getattr(act, "date", None)
+            if raw_date:
+                try:
+                    if isinstance(raw_date, (int, float)):
+                        dt = datetime.fromtimestamp(raw_date / 1000.0, tz=ZoneInfo("America/Chicago"))
+                    else:
+                        dt = datetime.fromisoformat(str(raw_date)).astimezone(ZoneInfo("America/Chicago"))
+                    date_display = dt.strftime("%b %d, %I:%M %p")
+                except Exception:
+                    date_display = str(raw_date)[:16]
+
+            # Parse actions / players involved
+            actions = getattr(act, "actions", [])
+            for team, action_type, player, bid in actions:
+                team_name = getattr(team, "team_name", str(team)) if team else "Free Agent"
+                player_name = getattr(player, "name", str(player)) if player else "Unknown Player"
+                pos = getattr(player, "position", "")
+                pro_team = getattr(player, "proTeam", "")
+                player_label = f"{player_name} ({pos} - {pro_team})" if pos else player_name
+
+                faab_display = f"${bid}" if bid and bid > 0 else "-"
+
+                activity_rows.append({
+                    "DATE": date_display,
+                    "FRANCHISE": team_name,
+                    "ACTION": format_activity_badge(action_type),
+                    "PLAYER": player_label,
+                    "BID": faab_display
+                })
+    except Exception as e:
+        print(f"Recent activity fetch error: {e}")
+
+    if activity_rows:
+        df_activity = pd.DataFrame(activity_rows)
+        st.markdown(
+            f'<div class="table-scroll-container">{df_activity.to_html(classes="sleeper-table", index=False, escape=False)}</div>',
+            unsafe_allow_html=True
+        )
+    else:
+        st.info("No recent transaction activity recorded for this period.")
+
 st.divider()
 
 # =========================================================
