@@ -65,6 +65,39 @@ st.markdown("""
         letter-spacing: 0.5px;
     }
 
+    .start-sit-header,
+    .waiver-wire-header,
+    .trade-evaluation-header,
+    .positional-economy-header {
+        font-size: 1.55rem;
+        font-weight: 900;
+        color: var(--text-color) !important;
+        -webkit-text-fill-color: var(--text-color) !important;
+        letter-spacing: 0.2px;
+        text-transform: uppercase;
+        margin: 0;
+    }
+
+    /* System OS Dark Mode Fallback */
+    @media (prefers-color-scheme: dark) {
+    .start-sit-header,
+    .waiver-wire-header,
+    .trade-evaluation-header,
+    .positional-economy-header {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        }
+    }
+
+    /* BaseWeb / Streamlit Dark Background Container Detection */
+    [data-testid="stAppViewContainer"]:has(header[data-testid="stHeader"]) .start-sit-header,
+    [data-testid="stAppViewContainer"]:has(header[data-testid="stHeader"]) .waiver-wire-header,
+    [data-testid="stAppViewContainer"]:has(header[data-testid="stHeader"]) .trade-evaluation-header,
+    [data-testid="stAppViewContainer"]:has(header[data-testid="stHeader"]) .positional-economy-header {
+    color: var(--text-color) !important;
+    -webkit-text-fill-color: var(--text-color) !important;
+    }
+
     /* Expander Section Headers (Active Squad & Available Wire, Standings, etc.) */
     div[data-testid="stExpander"] details summary p {
         font-size: 0.95rem !important;
@@ -375,30 +408,7 @@ from zoneinfo import ZoneInfo
 
 st.markdown("""
 <style>
-/* 1. Target the Selectbox value container (the closed/active state) */
-div[data-testid="stSelectbox"]:has(div[data-testid="stSelectbox"] input) div[data-baseweb="select"] div {
-    font-weight: 900 !important;
-    color: #000000 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.04em !important;
-}
 
-/* 2. Direct fallback for the selected label text inside the select input */
-div[data-testid="stSelectbox"] div[data-baseweb="select"] * {
-    font-weight: 800 !important;
-    color: #000000 !important;
-    text-transform: uppercase !important;
-}
-
-/* 3. Target the dropdown popover menu options when opened */
-div[data-baseweb="popover"] ul[role="listbox"] li[role="option"],
-div[data-baseweb="popover"] ul[role="listbox"] li[role="option"] span,
-div[data-baseweb="popover"] ul[role="listbox"] li[role="option"] div {
-    font-weight: 800 !important;
-    color: #000000 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.03em !important;
-}
 
 /* 4. Ensure the selectbox input field background contrasts cleanly with black text */
 div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
@@ -766,6 +776,50 @@ def render_sidebar_matchup_cards():
 
 # Single unified sidebar block
 with st.sidebar:
+    # High-specificity CSS
+    st.markdown("""
+    <style>
+    /* Scope black bold uppercase ONLY to the selectbox dropdown */
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] * {
+        font-weight: 800 !important;
+        color: #000000 !important;
+        text-transform: uppercase !important;
+    }
+    div[data-baseweb="popover"] ul[role="listbox"] li[role="option"] * {
+        font-weight: 800 !important;
+        color: #000000 !important;
+        text-transform: uppercase !important;
+    }
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+        background-color: #f8fafc !important;
+        border-radius: 6px !important;
+    }
+
+    /* --- EXPANDER HEADER DEEP TEAL OVERRIDE --- */
+    /* Target expander summary text with deep container teal #115E59 */
+    [data-testid="stExpander"] summary,
+    [data-testid="stExpander"] summary *,
+    [data-testid="stExpander"] summary p,
+    [data-testid="stExpander"] summary span,
+    [data-testid="stExpander"] summary div,
+    [data-testid="stExpanderToggleIcon"] ~ div,
+    [data-testid="stExpanderToggleIcon"] ~ div * {
+        color: #115E59 !important;
+        -webkit-text-fill-color: #115E59 !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.02em !important;
+    }
+
+    /* Target the expander chevron icon with matching deep teal */
+    [data-testid="stExpander"] summary svg,
+    [data-testid="stExpander"] summary svg path {
+        fill: #115E59 !important;
+        stroke: #115E59 !important;
+        color: #115E59 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     st.markdown(f"### {league.settings.name}")
     st.caption(f"ESPN Season {YEAR} • {len(league.teams)} Clubs")
 
@@ -781,6 +835,7 @@ with st.sidebar:
         "Active Roster",
         options=team_list,
         index=dakshots_idx,
+        format_func=lambda name: str(name).upper(),
         key="sidebar_active_roster_select"
     )
     my_team = team_options[selected_team_name]
@@ -1125,7 +1180,7 @@ ESPN_PRO_TEAMS = {
 # PAGE 1: WAIVER WIRE SCOUT
 # =========================================================
 if active_page == "Waiver Wire Scout":
-    st.markdown("<div class='section-title'>Waiver Wire Intelligence</div>", unsafe_allow_html=True)
+    st.markdown("<div class='waiver-wire-header'>Waiver Wire Intelligence</div>", unsafe_allow_html=True)
     st.markdown("<div class='meta-caption'>AI Roster Audit & Free Agent Targets</div>", unsafe_allow_html=True)
 
     if st.button("Run Waiver Analysis"):
@@ -1182,7 +1237,7 @@ if active_page == "Waiver Wire Scout":
 # =========================================================
 
 elif active_page == "Start/Sit Debater":
-    st.markdown('<div class="hero-title">Start / Sit Debater</div>', unsafe_allow_html=True)
+    st.markdown('<div class="start-sit-header">Start / Sit Debater</div>', unsafe_allow_html=True)
 
     # Pre-build lookup dictionaries and labels
     roster_players = my_team.roster
@@ -1237,7 +1292,7 @@ elif active_page == "Start/Sit Debater":
         )
 
         st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
-        if st.button("⚖️ Debate Internal Roster", use_container_width=True, key="btn_debate_roster"):
+        if st.button("⚖️ Debate Internal Roster", width='content', key="btn_debate_roster"):
             if p1_r_name == p2_r_name:
                 st.warning("Please choose two different players to debate.")
             else:
@@ -1275,7 +1330,7 @@ elif active_page == "Start/Sit Debater":
         )
 
         st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
-        if st.button("🔍 Debate Wire Pivot", use_container_width=True, key="btn_debate_wire"):
+        if st.button("🔍 Debate Wire Pivot", width='content', key="btn_debate_wire"):
             chosen_p1 = roster_options[p1_w_name]
             chosen_p2 = wire_options[p2_w_name]
             debate_trigger = True
@@ -1401,7 +1456,7 @@ elif active_page == "Start/Sit Debater":
 # PAGE 3: TRADE EVALUATOR
 # =========================================================
 elif active_page == "Trade Evaluator":
-    st.markdown("<div class='section-title'>Trade Desk Evaluator</div>", unsafe_allow_html=True)
+    st.markdown("<div class='trade-evaluation-header'>Trade Desk Evaluator</div>", unsafe_allow_html=True)
     st.markdown("<div class='meta-caption'>Multi-Player Equity & Depth Chart Impact</div>", unsafe_allow_html=True)
 
     opponent_options = [team.team_name for team in league.teams if team.team_name != my_team.team_name]
@@ -1516,7 +1571,7 @@ elif active_page == "Trade Evaluator":
 # PAGE 4: POSITIONAL ECONOMY & LEAGUE MARKET
 # =========================================================
 elif active_page == "Positional Economy":
-    st.markdown("<div class='section-title'>League Market Economics</div>", unsafe_allow_html=True)
+    st.markdown("<div class='positional-economy-header'>League Market Economics</div>", unsafe_allow_html=True)
     st.markdown("<div class='meta-caption'>Asset Allocation, Efficiency, Market Velocity & Scarcity</div>", unsafe_allow_html=True)
 
     # 4 Dedicated Tabs
@@ -1566,17 +1621,34 @@ elif active_page == "Positional Economy":
             }
         )
         fig_alloc.update_layout(
-            barmode="stack",
-            height=450,
-            margin=dict(l=10, r=10, t=25, b=10),
-            plot_bgcolor="#FFFFFF",
-            paper_bgcolor="#FFFFFF",
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            xaxis=dict(showgrid=True, gridcolor="#F1F5F9", title="Total Rostered Players"),
-            yaxis=dict(title="")
-        )
-        st.plotly_chart(fig_alloc, use_container_width=True)
+    # 1. Expand the left margin so full team names fit comfortably
+        margin=dict(l=160, r=40, t=40, b=40),
+    
+    # 2. Force y-axis labels to be fully visible, solid black, and auto-spaced
+        yaxis=dict(
+        automargin=True,
+        tickfont=dict(color="#000000", size=12),
+        title=None,          # Removes redundant y-axis title if present
+        color="#000000",
+        showticklabels=True
+        ),
+    
+    # 3. Ensure x-axis stays cleanly formatted
+        xaxis=dict(
+        title=dict(text="Total Rostered Players", font=dict(color="#000000")),
+        tickfont=dict(color="#000000"),
+        color="#000000"
+        ),
+    
+    # 4. Clean white background and black fonts throughout
+        paper_bgcolor="#FFFFFF",
+        plot_bgcolor="#FFFFFF",
+        font=dict(color="#000000")
+    )
 
+        st.plotly_chart(fig_alloc, theme=None, width="stretch")
+
+    
     # ---------------------------------------------------------
     # TAB 2: CAPITAL PRODUCTIVITY (STARTERS VS BENCH)
     # ---------------------------------------------------------
@@ -1609,16 +1681,42 @@ elif active_page == "Positional Economy":
             text="Team",
             color_continuous_scale=["#CBD5E1", "#0F766E"]
         )
-        fig_eff.update_traces(textposition='top center')
+
+        # Force team labels above dots to stay black
+        fig_eff.update_traces(
+            textposition="top center",
+            textfont=dict(color="#000000", size=11)
+        )
+
         fig_eff.update_layout(
             height=450,
-            plot_bgcolor="#FFFFFF",
             paper_bgcolor="#FFFFFF",
-            xaxis=dict(showgrid=True, gridcolor="#F1F5F9", title="Stranded Bench Points"),
-            yaxis=dict(showgrid=True, gridcolor="#F1F5F9", title="Active Starting Points")
+            plot_bgcolor="#FFFFFF",
+            margin=dict(l=60, r=40, t=40, b=50),
+            font=dict(color="#000000"),
+            xaxis=dict(
+                showgrid=True,
+                gridcolor="#E2E8F0",
+                linecolor="#000000",
+                color="#000000",
+                tickfont=dict(color="#000000"),
+                title=dict(text="Stranded Bench Points", font=dict(color="#000000"))
+            ),
+            yaxis=dict(
+                showgrid=True,
+                gridcolor="#E2E8F0",
+                linecolor="#000000",
+                color="#000000",
+                tickfont=dict(color="#000000"),
+                title=dict(text="Active Starting Points", font=dict(color="#000000"))
+            ),
+            coloraxis_colorbar=dict(
+                title=dict(text="Efficiency %", font=dict(color="#000000")),
+                tickfont=dict(color="#000000")
+            )
         )
-        st.plotly_chart(fig_eff, use_container_width=True)
 
+        st.plotly_chart(fig_eff, theme=None, width="stretch")
     # ---------------------------------------------------------
     # TAB 3: WAIVER LIQUIDITY & ACQUISITION VELOCITY
     # ---------------------------------------------------------
@@ -1653,16 +1751,42 @@ elif active_page == "Positional Economy":
             color_continuous_scale=["#94A3B8", "#0F766E"],
             hover_data=["Trades", "FAAB Spent", "Wins"]
         )
-        fig_liq.update_traces(textposition="top center")
+
+        # Force team bubble labels to stay solid black
+        fig_liq.update_traces(
+            textposition="top center",
+            textfont=dict(color="#000000", size=11)
+        )
+
         fig_liq.update_layout(
             height=450,
-            plot_bgcolor="#FFFFFF",
             paper_bgcolor="#FFFFFF",
-            xaxis=dict(showgrid=True, gridcolor="#F1F5F9", title="Waiver Claims / Roster Adds"),
-            yaxis=dict(showgrid=True, gridcolor="#F1F5F9", title="Total Points For (PF)")
+            plot_bgcolor="#FFFFFF",
+            margin=dict(l=60, r=40, t=40, b=50),
+            font=dict(color="#000000"),
+            xaxis=dict(
+                showgrid=True,
+                gridcolor="#E2E8F0",
+                linecolor="#000000",
+                color="#000000",
+                tickfont=dict(color="#000000"),
+                title=dict(text="Waiver Claims / Roster Adds", font=dict(color="#000000"))
+            ),
+            yaxis=dict(
+                showgrid=True,
+                gridcolor="#E2E8F0",
+                linecolor="#000000",
+                color="#000000",
+                tickfont=dict(color="#000000"),
+                title=dict(text="Total Points For (PF)", font=dict(color="#000000"))
+            ),
+            coloraxis_colorbar=dict(
+                title=dict(text="Total Moves", font=dict(color="#000000")),
+                tickfont=dict(color="#000000")
+            )
         )
-        st.plotly_chart(fig_liq, use_container_width=True)
 
+        st.plotly_chart(fig_liq, theme=None, width="stretch")
     # ---------------------------------------------------------
     # TAB 4: VORP SCARCITY CURVES
     # ---------------------------------------------------------
@@ -1699,11 +1823,34 @@ elif active_page == "Positional Economy":
                     "TE": "#D97706"
                 }
             )
+
             fig_vorp.update_layout(
                 height=420,
-                plot_bgcolor="#FFFFFF",
                 paper_bgcolor="#FFFFFF",
-                xaxis=dict(showgrid=True, gridcolor="#F1F5F9", title="Position Rank (Top 24)"),
-                yaxis=dict(showgrid=True, gridcolor="#F1F5F9", title="Total Points Scored")
+                plot_bgcolor="#FFFFFF",
+                margin=dict(l=60, r=40, t=40, b=50),
+                font=dict(color="#000000"),
+                legend=dict(
+                    font=dict(color="#000000"),
+                    title=dict(font=dict(color="#000000")),
+                    bgcolor="rgba(255, 255, 255, 0.9)"
+                ),
+                xaxis=dict(
+                    showgrid=True,
+                    gridcolor="#E2E8F0",
+                    linecolor="#000000",
+                    color="#000000",
+                    tickfont=dict(color="#000000"),
+                    title=dict(text="Position Rank (Top 24)", font=dict(color="#000000"))
+                ),
+                yaxis=dict(
+                    showgrid=True,
+                    gridcolor="#E2E8F0",
+                    linecolor="#000000",
+                    color="#000000",
+                    tickfont=dict(color="#000000"),
+                    title=dict(text="Total Points Scored", font=dict(color="#000000"))
+                )
             )
-            st.plotly_chart(fig_vorp, use_container_width=True)
+
+            st.plotly_chart(fig_vorp, theme=None, width="stretch")
