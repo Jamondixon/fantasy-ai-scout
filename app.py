@@ -519,9 +519,9 @@ def get_nfl_weather_map():
     weather_map = {}
     url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
-    }
+            "User-Agent": "ESPN/6.19.0 (iPhone; iOS 17.5.1; Scale/3.00)",
+            "Accept": "application/json",
+        }
     resolved_teams = set()
 
     try:
