@@ -381,23 +381,112 @@ client = genai.Client(api_key=API_KEY)
 def load_espn_league():
     return League(league_id=LEAGUE_ID, year=YEAR, espn_s2=ESPN_S2, swid=SWID)
 
+@st.cache_data(ttl=600)
+def load_free_agents(_league, size=15):
+    """Caches free agent lookups to prevent network lag on tab switches."""
+    try:
+        return _league.free_agents(size=size)
+    except Exception as e:
+        print(f"Free agents fetch failed: {e}")
+        return []
+
 try:
     with st.spinner("Syncing league environment..."):
         league = load_espn_league()
-        free_agents = league.free_agents(size=15)
+        # Uses cached lookup instead of hitting ESPN live every rerun
+        free_agents = load_free_agents(league, size=15)
 except Exception as e:
     st.error(f"League connection failed: {e}")
     st.stop()
 
+# =========================================================
+# 3. DATA LOADING & CACHING (Add these here)
+# =========================================================
+
+@st.cache_data(ttl=300)
+def get_trade_directory(_league, _my_team):
+    """
+    Cached player names and roster summaries for trade evaluations.
+    """
+    my_players = [p.name for p in _my_team.roster]
+    opponents = {}
+    
+    for team in _league.teams:
+        if team.team_name != _my_team.team_name:
+            opponents[team.team_name] = {
+                "team_obj": team,
+                "players": [p.name for p in team.roster],
+                "summary": ", ".join(f"{p.name} ({p.position})" for p in team.roster)
+            }
+            
+    my_summary = ", ".join(f"{p.name} ({p.position})" for p in _my_team.roster)
+    return my_players, my_summary, opponents
+
+
+@st.cache_data(show_spinner=False)
+def evaluate_trade(my_team_name, opp_team_name, send_names, recv_names, my_roster_summary, opp_roster_summary):
+    prompt = f"""
+    Evaluate this proposed fantasy football trade:
+    TEAM A (Sending): {my_team_name} | Pieces: {send_names} | Squad: {my_roster_summary}
+    TEAM B (Sending): {opp_team_name} | Pieces: {recv_names} | Squad: {opp_roster_summary}
+
+    Verdict Rules:
+    - Seems Fair: Balanced value swap.
+    - Everybody Wins: Fixes positional drought cleanly on both sides.
+    - Getting Fleeced: Unbalanced overpay.
+    - Slightly Off: Minor edge to one side.
+    - Collusion Warning: Destructive imbalance.
+    """
+
+    response = client.models.generate_content(
+        model='gemini-3.5-flash',
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=TradeEvaluation,
+            tools=[],
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+        )
+    )
+    return response.text
+
+@st.cache_data(ttl=300)
+def get_debater_player_options(_my_team, _free_agents):
+    """Caches selectbox labels and player mappings for Start/Sit comparisons."""
+    roster_opts = {
+        f"{p.name} ({p.position} - {get_player_team_abbr(p)})": p 
+        for p in _my_team.roster
+    }
+    wire_opts = {
+        f"{p.name} ({p.position} - {get_player_team_abbr(p)})": p 
+        for p in _free_agents
+    }
+    return roster_opts, wire_opts
+
+@st.cache_data(ttl=300)
+def get_league_player_directory(_league):
+    """
+    Builds an instant, cached lookup of every rostered player in the league.
+    """
+    directory = {}
+    for team in _league.teams:
+        for p in team.roster:
+            directory[p.name] = {
+                "player_obj": p,
+                "team_name": team.team_name,
+                "position": p.position,
+                "points": getattr(p, "total_points", 0.0),
+                "projected": getattr(p, "projected_total_points", 0.0)
+            }
+    return directory
+
 # --- Identify Primary Team ---
-# Defaults to "Dakshots"; falls back to first team if not found
 target_team_name = "Dakshots"
 
 my_team = next(
     (team for team in league.teams if target_team_name.lower() in team.team_name.lower()),
     league.teams[0]
 )
-
 # =========================================================
 # 4. SIDEBAR NAVIGATION & MATCHUPS
 # =========================================================
@@ -493,64 +582,91 @@ def format_game_status_cst(event, status_obj):
     return raw_status
 
 
+from concurrent.futures import ThreadPoolExecutor
+
+# Reusable HTTP session with connection pooling
+HTTP_SESSION = requests.Session()
+ESPN_HEADERS = {
+    "User-Agent": "ESPN/6.19.0 (iPhone; iOS 17.5.1; Scale/3.00)",
+    "Accept": "application/json",
+}
+
+@st.cache_data(ttl=3600)
+def fetch_single_open_meteo_temp(lat, lon):
+    """Fetches Open-Meteo current condition code and temp with connection pooling."""
+    try:
+        url = (
+            f"https://api.open-meteo.com/v1/forecast?"
+            f"latitude={lat}&longitude={lon}&current=temperature_2m,weather_code&temperature_unit=fahrenheit"
+        )
+        res = HTTP_SESSION.get(url, timeout=2.0)
+        if res.status_code == 200:
+            cur = res.json().get("current", {})
+            temp = round(cur.get("temperature_2m", 70))
+            code = cur.get("weather_code", 0)
+
+            if code in [51, 53, 55, 61, 63, 65, 80, 81, 82]:
+                return f"🌧️ {temp}°F"
+            elif code in [71, 73, 75, 77, 85, 86]:
+                return f"❄️ {temp}°F"
+            elif code in [95, 96, 99]:
+                return f"⛈️ {temp}°F"
+            elif code in [1, 2, 3]:
+                return f"☁️ {temp}°F"
+            elif code in [45, 48]:
+                return f"🌫️ {temp}°F"
+            return f"☀️ {temp}°F"
+    except Exception:
+        pass
+    return "☀️ 72°F"
+
 def get_live_venue_weather(home_team_abbr):
-    """Fallback: Queries Open-Meteo for real-time temperature and condition code."""
+    """Fast cache-backed lookup for Open-Meteo fallback."""
     venue_info = STADIUM_COORDS.get(home_team_abbr.upper())
     if not venue_info:
         return "☀️ 72°F"
     lat, lon, is_dome = venue_info
     if is_dome:
         return "🏟️ Dome"
-
-    try:
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code&temperature_unit=fahrenheit"
-        r = requests.get(url, timeout=3).json().get("current", {})
-        temp = round(r.get("temperature_2m", 70))
-        code = r.get("weather_code", 0)
-
-        if code in [51, 53, 55, 61, 63, 65, 80, 81, 82]:
-            return f"🌧️ {temp}°F"
-        elif code in [71, 73, 75, 77, 85, 86]:
-            return f"❄️ {temp}°F"
-        elif code in [95, 96, 99]:
-            return f"⛈️ {temp}°F"
-        elif code in [1, 2, 3]:
-            return f"☁️ {temp}°F"
-        elif code in [45, 48]:
-            return f"🌫️ {temp}°F"
-        return f"☀️ {temp}°F"
-    except Exception:
-        return "☀️ 70°F"
+    return fetch_single_open_meteo_temp(lat, lon)
 
 
-@st.cache_data(ttl=1800)
-def get_nfl_weather_map():
-    """Builds an accurate weather badge mapping for all 32 NFL teams."""
-    weather_map = {}
+@st.cache_data(ttl=120)
+def fetch_espn_master_payload():
+    """
+    Single unified network hit to ESPN.
+    Extracts games and populates the global weather map in one pass.
+    """
     url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
-    headers = {
-            "User-Agent": "ESPN/6.19.0 (iPhone; iOS 17.5.1; Scale/3.00)",
-            "Accept": "application/json",
-        }
+    games = []
+    weather_map = {}
     resolved_teams = set()
+    needed_fallbacks = []  # tuples of (home_team_abbr, lat, lon)
 
     try:
-        res = requests.get(url, headers=headers, timeout=5)
+        res = HTTP_SESSION.get(url, headers=ESPN_HEADERS, timeout=4.0)
         if res.status_code == 200:
-            data = res.json()
-            for event in data.get("events", []):
+            events = res.json().get("events", [])
+
+            for event in events:
+                status_obj = event.get("status", {})
+                status_display = format_game_status_cst(event, status_obj)
+                state = status_obj.get("state", "").lower()
+
                 comps = event.get("competitions", [{}])[0]
                 competitors = comps.get("competitors", [])
 
-                home_comp = next((c for c in competitors if c.get("homeAway") == "home"), {})
-                home_team = (
-                    home_comp.get("team", {}).get("abbreviation") 
-                    or home_comp.get("team", {}).get("shortDisplayName") 
-                    or ""
-                ).upper()
+                home = next((c for c in competitors if c.get("homeAway") == "home"), {})
+                away = next((c for c in competitors if c.get("homeAway") == "away"), {})
+
+                home_team = home.get("team", {})
+                away_team = away.get("team", {})
+
+                home_abbr = (home_team.get("abbreviation") or "").upper()
+                away_abbr = (away_team.get("abbreviation") or "").upper()
 
                 venue = comps.get("venue", {})
-                is_indoor = venue.get("indoor", False) or STADIUM_COORDS.get(home_team, (0, 0, False))[2]
+                is_indoor = venue.get("indoor", False) or STADIUM_COORDS.get(home_abbr, (0, 0, False))[2]
 
                 weather_info = comps.get("weather") or event.get("weather") or {}
                 display_text = str(weather_info.get("displayValue", "")).lower()
@@ -559,44 +675,85 @@ def get_nfl_weather_map():
 
                 if is_indoor:
                     badge = '<span title="Indoor / Retractable Dome">🏟️ Dome</span>'
-                elif any(w in display_text for w in ["rain", "shower", "drizzle", "t-storm", "storm", "precip"]):
+                elif any(w in display_text for w in ["rain", "shower", "drizzle", "t-storm", "precip"]):
                     badge = f'<span title="Rain">🌧️ Rain{temp_str}</span>'
-                elif any(w in display_text for w in ["snow", "blizzard", "flurries", "sleet", "ice"]):
+                elif any(w in display_text for w in ["snow", "blizzard", "flurries", "sleet"]):
                     badge = f'<span title="Snow">❄️ Snow{temp_str}</span>'
-                elif any(w in display_text for w in ["cloud", "overcast", "fog", "haze"]):
+                elif any(w in display_text for w in ["cloud", "overcast", "fog"]):
                     badge = f'<span title="Cloudy">☁️ Cloud{temp_str}</span>'
                 elif any(w in display_text for w in ["wind", "breezy"]):
                     badge = f'<span title="Windy">💨 Wind{temp_str}</span>'
-                elif any(w in display_text for w in ["clear", "sunny", "fair"]):
+                elif any(w in display_text for w in ["clear", "sunny"]):
                     badge = f'<span title="Clear/Sunny">☀️ Sun{temp_str}</span>'
                 elif temp is not None:
                     badge = f'<span title="Temperature">🌡️ {temp}°F</span>'
                 else:
-                    badge = f'<span title="Live Venue">{get_live_venue_weather(home_team)}</span>'
+                    badge = None
+                    if home_abbr in STADIUM_COORDS and not is_indoor:
+                        lat, lon, _ = STADIUM_COORDS[home_abbr]
+                        needed_fallbacks.append((home_abbr, lat, lon))
 
-                for comp in competitors:
-                    abbr = comp.get("team", {}).get("abbreviation", "").upper()
-                    if abbr:
-                        weather_map[abbr] = badge
-                        resolved_teams.add(abbr)
+                if badge:
+                    weather_map[home_abbr] = badge
+                    if away_abbr:
+                        weather_map[away_abbr] = badge
+                    resolved_teams.add(home_abbr)
+                    resolved_teams.add(away_abbr)
+
+                games.append({
+                    "id": event.get("id"),
+                    "state": state,
+                    "status_display": status_display,
+                    "home_abbr": home_abbr or "TBD",
+                    "away_abbr": away_abbr or "TBD",
+                    "home_score": home.get("score", "-"),
+                    "away_score": away.get("score", "-"),
+                    "home_logo": home_team.get("logo", ""),
+                    "away_logo": away_team.get("logo", ""),
+                })
     except Exception as e:
-        print(f"Weather map fetch error: {e}")
+        print(f"ESPN master fetch error: {e}")
 
-    for team_abbr in STADIUM_COORDS.keys():
+    # Parallelize fallback queries across threads
+    if needed_fallbacks:
+        with ThreadPoolExecutor(max_workers=len(needed_fallbacks)) as executor:
+            future_to_team = {
+                executor.submit(fetch_single_open_meteo_temp, lat, lon): team 
+                for team, lat, lon in needed_fallbacks
+            }
+            for future in future_to_team:
+                team = future_to_team[future]
+                try:
+                    val = future.result()
+                    badge = f'<span title="Live Venue">{val}</span>'
+                except Exception:
+                    badge = '<span title="Clear">☀️ 72°F</span>'
+                weather_map[team] = badge
+                resolved_teams.add(team)
+
+    # Fast offline fill for remaining bye/unresolved teams
+    for team_abbr, (_, _, is_dome) in STADIUM_COORDS.items():
         if team_abbr not in resolved_teams:
-            lat, lon, is_dome = STADIUM_COORDS[team_abbr]
-            if is_dome:
-                weather_map[team_abbr] = '<span title="Indoor Dome">🏟️ Dome</span>'
-            else:
-                weather_map[team_abbr] = f'<span title="Live Venue">{get_live_venue_weather(team_abbr)}</span>'
+            weather_map[team_abbr] = '<span title="Indoor Dome">🏟️ Dome</span>' if is_dome else '<span title="Outdoor">☀️ 72°F</span>'
 
     weather_map["FA"] = '<span title="Free Agent / Bye">-</span>'
     weather_map[""] = '<span title="Free Agent / Bye">-</span>'
+
+    # Stitch weather badge into the game objects
+    for g in games:
+        g["weather_badge"] = weather_map.get(g["home_abbr"], "🏟️ Dome")
+
+    return games, weather_map
+
+
+def get_nfl_scoreboard_data():
+    games, _ = fetch_espn_master_payload()
+    return games
+
+def get_nfl_weather_map():
+    _, weather_map = fetch_espn_master_payload()
     return weather_map
 
-
-@st.cache_data(ttl=60)
-def get_nfl_scoreboard_data():
     """Fetches the current week's NFL games from ESPN's scoreboard API."""
     url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
     headers = {
@@ -1256,8 +1413,9 @@ if active_page == "Waiver Wire Scout":
             Tone: Sharp, quantitative, no introductory fluff.
             """
 
-            response = client.models.generate_content(
-            model='gemini-3.5-flash',
+            # 1. Stream the model's response while keeping response_schema intact
+        response_stream = client.models.generate_content_stream(
+            model="gemini-3.5-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -1266,18 +1424,32 @@ if active_page == "Waiver Wire Scout":
                 automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
             )
         )
-        report = ScoutReport.model_validate_json(response.text)
+
+        # 2. Accumulate the streamed chunks
+        chunks = []
+        with st.status("Analyzing match-up data...", expanded=False) as status:
+            for chunk in response_stream:
+                if chunk.text:
+                    chunks.append(chunk.text)
+            status.update(label="Scout report ready!", state="complete", expanded=False)
+
+        # 3. Parse JSON directly into your ScoutReport object
+        raw_json = "".join(chunks)
+        report = ScoutReport.model_validate_json(raw_json)
+
+        # If your template was referencing full_report_text.team_summary, assign it:
+        full_report_text = report
 
         st.markdown(f"""
         <div class='callout-box'>
             <div style="font-weight: 800; color: #0F766E; margin-bottom: 2px;">ROSTER AUDIT</div>
-            <div style="color: #1E293B;">{report.team_summary}</div>
-            <div style="margin-top: 8px; font-weight: 700; color: #B45309;">Primary Vulnerability: {report.weakest_position}</div>
+            <div style="color: #1E293B;">{full_report_text.team_summary}</div>
+            <div style="margin-top: 8px; font-weight: 700; color: #B45309;">Primary Vulnerability: {full_report_text.weakest_position}</div>
         </div>
         """, unsafe_allow_html=True)
 
         st.markdown("<div class='section-title' style='margin-top: 18px;'>Recommended Transactions</div>", unsafe_allow_html=True)
-        for rec in report.recommendations:
+        for rec in full_report_text.recommendations:
             st.markdown(f"""
             <div class='sleeper-card'>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -1301,18 +1473,9 @@ if active_page == "Waiver Wire Scout":
 elif active_page == "Start/Sit Debater":
     st.markdown('<div class="start-sit-header">Start / Sit Debater</div>', unsafe_allow_html=True)
 
-    # Pre-build lookup dictionaries and labels
-    roster_players = my_team.roster
-    roster_options = {
-        f"{p.name} ({p.position} - {get_player_team_abbr(p)})": p 
-        for p in roster_players
-    }
+    # Instant cached option lookups (no loop overhead on reruns)
+    roster_options, wire_options = get_debater_player_options(my_team, free_agents)
     roster_names = list(roster_options.keys())
-
-    wire_options = {
-        f"{p.name} ({p.position} - {get_player_team_abbr(p)})": p 
-        for p in free_agents
-    }
     wire_names = list(wire_options.keys())
 
     # --- 2-Column Dilemma Interface ---
@@ -1469,6 +1632,13 @@ elif active_page == "Start/Sit Debater":
                 p1_full_team = team_names.get(p1_team, p1_team)
                 p2_full_team = team_names.get(p2_team, p2_team)
 
+                # Construct prompt for AI evaluation
+                import re
+                
+                # Strip out HTML tags like <span title="..."> from weather variables so they don't leak
+                p1_clean_wx = re.sub(r'<[^>]*>', '', str(p1_wx)).strip()
+                p2_clean_wx = re.sub(r'<[^>]*>', '', str(p2_wx)).strip()
+
                 prompt = f"""
                 You are an institutional fantasy football analyst for the active NFL season.
                 
@@ -1485,32 +1655,53 @@ elif active_page == "Start/Sit Debater":
                 - Current NFL Franchise: {p1_full_team} ({p1_team})
                 - Total Season Fantasy Points: {chosen_p1.total_points}
                 - Projected Points: {getattr(chosen_p1, 'projected_total_points', 0.0):.1f}
-                - Venue & Weather: {p1_wx}
+                - Venue & Weather: {p1_clean_wx}
                 
                 Candidate 2: {chosen_p2.name}
                 - Position: {chosen_p2.position}
                 - Current NFL Franchise: {p2_full_team} ({p2_team})
                 - Total Season Fantasy Points: {chosen_p2.total_points}
                 - Projected Points: {getattr(chosen_p2, 'projected_total_points', 0.0):.1f}
-                - Venue & Weather: {p2_wx}
+                - Venue & Weather: {p2_clean_wx}
                 
-                Provide a structured, sharp evaluation:
-                1. **Definitive Start Recommendation**: Name the winner clearly.
-                2. **Ceiling vs. Floor Analysis**: Contrast their risk profiles within their respective current offensive systems.
-                3. **Weather & Environmental Factor**: How the venue/weather affects the game script.
-                Keep it punchy, quantitative, and formatted with clean markdown bullet points.
+                OUTPUT FORMAT RULES:
+                - Sentence 1 MUST be your clear verdict in bold format naming the winning player and one punchy reason why (e.g., "**Start [Player Name]** — [Punchy Reason].").
+                - DO NOT include introductory boilerplate, section headers (no '###'), or labels like "1. Definitive Start Recommendation".
+                - Follow the verdict immediately with clean Markdown bullet points covering:
+                  * **Floor vs. Ceiling Risk Profiles**: Contrast touch volume, target share, and situational usage in their offenses.
+                  * **Environmental & Script Factors**: How the weather ({p1_clean_wx} vs {p2_clean_wx}) or venue directly influences expected play volume. Do not output raw HTML tags.
+                - Keep it quantitative, punchy, and direct.
                 """
-                
-                # Model generation call
-                chat = client.chats.create(model="gemini-3.5-flash")
-                response = chat.send_message(prompt)
-                output_text = response.text
-                
-                st.markdown(f"""
-                <div style="background: #F8FAFC; border: 1.5px solid #E2E8F0; border-left: 4px solid #0F766E; border-radius: 6px; padding: 16px; margin-top: 12px; color: #0F172A;">
-                    {response.text}
-                </div>
+
+                # Inject card styling targeting the native Streamlit container
+                st.markdown("""
+                <style>
+                div[data-testid="stVerticalBlock"]:has(> div.debater-sentinel) {
+                    background-color: #F8FAFC;
+                    border: 1.5px solid #E2E8F0;
+                    border-left: 4px solid #0F766E;
+                    border-radius: 6px;
+                    padding: 18px 20px;
+                    margin-top: 14px;
+                    color: #0F172A;
+                }
+                </style>
                 """, unsafe_allow_html=True)
+
+                card = st.container()
+                with card:
+                    # Invisible marker tag that gives the container its custom card border and background
+                    st.markdown('<div class="debater-sentinel" style="display:none;"></div>', unsafe_allow_html=True)
+                    
+                    chat = client.chats.create(model="gemini-3.5-flash")
+                    response_stream = chat.send_message_stream(prompt)
+
+                    def stream_generator():
+                        for chunk in response_stream:
+                            if chunk.text:
+                                yield chunk.text
+
+                    st.write_stream(stream_generator)
 
             except Exception as ex:
                 st.error(f"AI Debater Service Unavailable: {ex}")
@@ -1521,65 +1712,42 @@ elif active_page == "Trade Evaluator":
     st.markdown("<div class='trade-evaluation-header'>Trade Desk Evaluator</div>", unsafe_allow_html=True)
     st.markdown("<div class='meta-caption'>Multi-Player Equity & Depth Chart Impact</div>", unsafe_allow_html=True)
 
-    opponent_options = [team.team_name for team in league.teams if team.team_name != my_team.team_name]
+    # 1. Instant cached dictionary lookup
+    my_player_names, my_roster_summary, opponents_data = get_trade_directory(league, my_team)
+
+    opponent_options = list(opponents_data.keys())
     opponent_team_name = st.selectbox("Trading Partner", opponent_options)
-    opponent_team = team_options[opponent_team_name]
+    opponent_team = opponents_data[opponent_team_name]
 
     col_trade_a, col_trade_b = st.columns(2)
     with col_trade_a:
         your_trade_pieces = st.multiselect(
             f"{my_team.team_name} Sends",
-            options=[p.name for p in my_team.roster]
+            options=my_player_names
         )
     with col_trade_b:
         opp_trade_pieces = st.multiselect(
-            f"{opponent_team.team_name} Sends",
-            options=[p.name for p in opponent_team.roster]
+            f"{opponent_team_name} Sends",
+            options=opponent_team["players"]
         )
 
-    @st.cache_data(show_spinner=False)
-    def evaluate_trade(my_team_name, opp_team_name, send_names, recv_names, my_roster_summary, opp_roster_summary):
-        client = genai.Client(api_key=API_KEY)
-        prompt = f"""
-        Evaluate this proposed fantasy football trade:
-        TEAM A (Sending): {my_team_name} | Pieces: {send_names} | Squad: {my_roster_summary}
-        TEAM B (Sending): {opp_team_name} | Pieces: {recv_names} | Squad: {opp_roster_summary}
-
-        Verdict Rules:
-        - Seems Fair: Balanced value swap.
-        - Everybody Wins: Fixes positional drought cleanly on both sides.
-        - Getting Fleeced: Unbalanced overpay.
-        - Slightly Off: Minor edge to one side.
-        - Collusion Warning: Destructive imbalance.
-        """
-
-        response = client.models.generate_content(
-            model='gemini-3.5-flash',
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=TradeEvaluation,
-                tools=[],
-                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-            )
-        )
-        return response.text
-
+    # 2. Action trigger & execution
     if st.button("Evaluate Trade Equity"):
-        if not your_trade_pieces or not opp_trade_pieces:
-            st.warning("Select at least one player from each roster to proceed.")
+        if not your_trade_pieces and not opp_trade_pieces:
+            st.warning("Please select at least one player to evaluate.")
         else:
-            with st.spinner("Calculating depth chart impact and equity index..."):
-                my_roster_summary = [{"name": p.name, "pos": p.position, "pts": p.total_points} for p in my_team.roster]
-                opp_roster_summary = [{"name": p.name, "pos": p.position, "pts": p.total_points} for p in opponent_team.roster]
-
-                trade_json = evaluate_trade(
-                    my_team.team_name, opponent_team.team_name,
-                    your_trade_pieces, opp_trade_pieces,
-                    my_roster_summary, opp_roster_summary
+            with st.spinner("Analyzing trade equity and depth chart impact..."):
+                trade_result_json = evaluate_trade(
+                    my_team_name=my_team.team_name,
+                    opp_team_name=opponent_team_name,
+                    send_names=", ".join(your_trade_pieces),
+                    recv_names=", ".join(opp_trade_pieces),
+                    my_roster_summary=my_roster_summary,
+                    opp_roster_summary=opponent_team["summary"]
                 )
-                trade_res = TradeEvaluation.model_validate_json(trade_json)
+                trade_res = TradeEvaluation.model_validate_json(trade_result_json)
 
+            # --- Results Rendering (MUST BE INDENTED HERE) ---
             verdict_style = SLEEPER_VERDICTS.get(
                 trade_res.verdict, 
                 {"bg": "#F1F5F9", "text": "#0F172A", "border": "#94A3B8"}
@@ -1619,7 +1787,7 @@ elif active_page == "Trade Evaluator":
             with eval_col2:
                 st.markdown(f"""
                 <div class='sleeper-card'>
-                    <div style="font-size: 12px; font-weight: 800; color: #1E40AF; text-transform: uppercase; margin-bottom: 6px;">{opponent_team.team_name} Impact</div>
+                    <div style="font-size: 12px; font-weight: 800; color: #1E40AF; text-transform: uppercase; margin-bottom: 6px;">{opponent_team_name} Impact</div>
                     <div style="font-size: 14px; color: #1E293B; line-height: 1.55;">{trade_res.opponent_team_impact}</div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -1628,7 +1796,6 @@ elif active_page == "Trade Evaluator":
                 st.markdown("<div class='section-title' style='margin-top: 14px;'>Identified Variables</div>", unsafe_allow_html=True)
                 for risk in trade_res.risk_factors:
                     st.markdown(f"<div style='font-size: 14px; color: #334155; margin-bottom: 6px;'>• {risk}</div>", unsafe_allow_html=True)
-
 # =========================================================
 # PAGE 4: POSITIONAL ECONOMY & LEAGUE MARKET
 # =========================================================
