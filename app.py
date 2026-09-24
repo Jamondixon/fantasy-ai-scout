@@ -483,39 +483,21 @@ def format_game_status_cst(event, status_obj):
     return raw_status
 
 
-@st.cache_data(ttl=3600)
 def get_live_venue_weather(home_team_abbr):
     """Fallback: Queries Open-Meteo for real-time temperature and condition code."""
-    venue_info = STADIUM_COORDS.get(str(home_team_abbr).upper())
+    venue_info = STADIUM_COORDS.get(home_team_abbr.upper())
     if not venue_info:
         return "☀️ 72°F"
-    
     lat, lon, is_dome = venue_info
     if is_dome:
         return "🏟️ Dome"
 
     try:
-        url = (
-            f"https://api.open-meteo.com/v1/forecast"
-            f"?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code"
-            f"&temperature_unit=fahrenheit"
-        )
-        # Proper user-agent for Open-Meteo policy
-        headers = {"User-Agent": "FantasyScoutApp/1.0"}
-        r = requests.get(url, headers=headers, timeout=4)
-        
-        if r.status_code != 200:
-            return "☀️ 72°F"
-            
-        res_data = r.json()
-        current = res_data.get("current", {})
-        if not current:
-            return "☀️ 72°F"
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,weather_code&temperature_unit=fahrenheit"
+        r = requests.get(url, timeout=3).json().get("current", {})
+        temp = round(r.get("temperature_2m", 70))
+        code = r.get("weather_code", 0)
 
-        temp = round(current.get("temperature_2m", 70))
-        code = current.get("weather_code", 0)
-
-        # WMO Weather interpretation codes
         if code in [51, 53, 55, 61, 63, 65, 80, 81, 82]:
             return f"🌧️ {temp}°F"
         elif code in [71, 73, 75, 77, 85, 86]:
@@ -528,160 +510,18 @@ def get_live_venue_weather(home_team_abbr):
             return f"🌫️ {temp}°F"
         return f"☀️ {temp}°F"
     except Exception:
-        return "☀️ 72°F"
+        return "☀️ 70°F"
 
 
 @st.cache_data(ttl=1800)
 def get_nfl_weather_map():
-    """
-    Builds weather badge mapping for NFL teams actively playing this week.
-    Checks ESPN live game feeds first, falls back to Open-Meteo on demand.
-    """
+    """Builds an accurate weather badge mapping for all 32 NFL teams."""
     weather_map = {}
     url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Accept": "application/json, text/plain, */*",
     }
-
-    try:
-        res = requests.get(url, headers=headers, timeout=8)
-        if res.status_code == 200:
-            data = res.json()
-            for event in data.get("events", []):
-                comps = event.get("competitions", [{}])[0]
-                competitors = comps.get("competitors", [])
-
-                home_comp = next((c for c in competitors if c.get("homeAway") == "home"), {})
-                home_team = (
-                    home_comp.get("team", {}).get("abbreviation") 
-                    or home_comp.get("team", {}).get("shortDisplayName") 
-                    or ""
-                ).upper()
-
-                # Venue dome status
-                venue = comps.get("venue", {})
-                is_indoor = venue.get("indoor", False) or STADIUM_COORDS.get(home_team, (0, 0, False))[2]
-
-                # Weather parsing
-                weather_info = comps.get("weather") or event.get("weather") or {}
-                display_text = str(weather_info.get("displayValue", "")).lower()
-                temp = weather_info.get("temperature")
-                temp_str = f" {temp}°F" if temp is not None else ""
-
-                if is_indoor:
-                    badge = '<span title="Indoor / Retractable Dome">🏟️ Dome</span>'
-                elif any(w in display_text for w in ["rain", "shower", "drizzle", "t-storm", "storm", "precip"]):
-                    badge = f'<span title="Rain">🌧️ Rain{temp_str}</span>'
-                elif any(w in display_text for w in ["snow", "blizzard", "flurries", "sleet", "ice"]):
-                    badge = f'<span title="Snow">❄️ Snow{temp_str}</span>'
-                elif any(w in display_text for w in ["cloud", "overcast", "fog", "haze"]):
-                    badge = f'<span title="Cloudy">☁️ Cloud{temp_str}</span>'
-                elif any(w in display_text for w in ["wind", "breezy"]):
-                    badge = f'<span title="Windy">💨 Wind{temp_str}</span>'
-                elif any(w in display_text for w in ["clear", "sunny", "fair"]):
-                    badge = f'<span title="Clear/Sunny">☀️ Sun{temp_str}</span>'
-                elif temp is not None:
-                    badge = f'<span title="Temperature">🌡️ {temp}°F</span>'
-                else:
-                    # Individual cached query for outdoor venue
-                    badge = f'<span title="Live Venue">{get_live_venue_weather(home_team)}</span>'
-
-                # Apply to both teams in the matchup
-                for comp in competitors:
-                    abbr = comp.get("team", {}).get("abbreviation", "").upper()
-                    if abbr:
-                        weather_map[abbr] = badge
-
-    except Exception as e:
-        print(f"Weather map fetch error: {e}")
-
-    # Instant static fallback for byes/FA without hammering any APIs in a loop
-    for team_abbr, (_, _, is_dome) in STADIUM_COORDS.items():
-        if team_abbr not in weather_map:
-            weather_map[team_abbr] = '<span title="Indoor Dome">🏟️ Dome</span>' if is_dome else '<span>☀️ 72°F</span>'
-
-    weather_map["FA"] = '<span title="Free Agent / Bye">-</span>'
-    weather_map[""] = '<span title="Free Agent / Bye">-</span>'
-
-    return weather_map
-
-
-# =========================================================
-# HARDENED API HELPERS
-# =========================================================
-ESPN_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Referer": "https://www.espn.com/",
-}
-
-@st.cache_data(ttl=300, show_spinner=False)
-def get_nfl_scoreboard_data():
-    """Fetches current week's NFL games with robust headers and error resilience."""
-    url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
-    games = []
-
-    try:
-        res = requests.get(url, headers=ESPN_HEADERS, timeout=10)
-        if res.status_code != 200:
-            st.sidebar.warning(f"ESPN returned status {res.status_code}")
-            return []
-
-        data = res.json()
-        events = data.get("events", [])
-        if not events:
-            return []
-
-        # Safe fetch for weather map; if weather fails, games still render
-        try:
-            weather_map = get_nfl_weather_map()
-        except Exception:
-            weather_map = {}
-
-        for event in events:
-            status_obj = event.get("status", {})
-            status_display = format_game_status_cst(event, status_obj)
-            state = status_obj.get("state", "").lower()
-
-            comps = event.get("competitions", [{}])[0]
-            competitors = comps.get("competitors", [])
-
-            home = next((c for c in competitors if c.get("homeAway") == "home"), {})
-            away = next((c for c in competitors if c.get("homeAway") == "away"), {})
-
-            home_team = home.get("team", {})
-            away_team = away.get("team", {})
-
-            home_abbr = home_team.get("abbreviation", "TBD").upper()
-            away_abbr = away_team.get("abbreviation", "TBD").upper()
-
-            weather_badge = weather_map.get(home_abbr, weather_map.get(away_abbr, "🏟️ Dome"))
-
-            games.append({
-                "id": event.get("id"),
-                "state": state,
-                "status_display": status_display,
-                "weather_badge": weather_badge,
-                "away_abbr": away_abbr,
-                "away_score": away.get("score", "-"),
-                "away_logo": away_team.get("logo", ""),
-                "home_abbr": home_abbr,
-                "home_score": home.get("score", "-"),
-                "home_logo": home_team.get("logo", ""),
-            })
-
-    except requests.exceptions.Timeout:
-        st.sidebar.error("Scoreboard request timed out.")
-    except Exception as e:
-        st.sidebar.error(f"Scoreboard error: {str(e)}")
-
-    return games
-    """Builds an accurate weather badge mapping for all 32 NFL teams."""
-    weather_map = {}
-    url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
-    headers = {"User-Agent": "Mozilla/5.0"}
     resolved_teams = set()
 
     try:
@@ -749,7 +589,10 @@ def get_nfl_scoreboard_data():
 def get_nfl_scoreboard_data():
     """Fetches the current week's NFL games from ESPN's scoreboard API."""
     url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
-    headers = {"User-Agent": "Mozilla/5.0"}
+    headers = {
+        "User-Agent": "ESPN/6.19.0 (iPhone; iOS 17.5.1; Scale/3.00)",
+        "Accept": "application/json",
+    }
     games = []
 
     try:
