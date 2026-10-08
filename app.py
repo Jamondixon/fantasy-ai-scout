@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from typing import Literal
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from streamlit_local_storage import LocalStorage
 
 # =========================================================
 # 1. PAGE SETUP & THEME ENGINE
@@ -29,41 +30,7 @@ st.markdown("""
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
 
-   /* Hero Top Bar matching Run Waiver Analysis Button */
-    .hero-banner {
-        background: #0F766E;
-        border: 1.5px solid #115E59;
-        border-radius: 10px;
-        padding: 16px 24px;
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        margin-bottom: 22px;
-        box-shadow: 0 4px 14px rgba(15, 118, 110, 0.25);
-    }
-    .hero-icon {
-        font-size: 28px;
-        line-height: 1;
-    }
-    .hero-title {
-        font-size: 1.55rem;
-        font-weight: 900;
-        color: #FFFFFF;
-        letter-spacing: 0.2px;
-        text-transform: uppercase;
-        margin: 0;
-    }
-    .hero-tag {
-        font-size: 0.8rem;
-        font-weight: 700;
-        background: #115E59;
-        color: #FFFFFF;
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        border-radius: 4px;
-        padding: 4px 10px;
-        margin-left: auto;
-        letter-spacing: 0.5px;
-    }
+   
 
     .start-sit-header,
     .waiver-wire-header,
@@ -80,12 +47,12 @@ st.markdown("""
 
     /* System OS Dark Mode Fallback */
     @media (prefers-color-scheme: dark) {
-    .start-sit-header,
-    .waiver-wire-header,
-    .trade-evaluation-header,
-    .positional-economy-header {
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
+        .start-sit-header,
+        .waiver-wire-header,
+        .trade-evaluation-header,
+        .positional-economy-header {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
         }
     }
 
@@ -94,11 +61,11 @@ st.markdown("""
     [data-testid="stAppViewContainer"]:has(header[data-testid="stHeader"]) .waiver-wire-header,
     [data-testid="stAppViewContainer"]:has(header[data-testid="stHeader"]) .trade-evaluation-header,
     [data-testid="stAppViewContainer"]:has(header[data-testid="stHeader"]) .positional-economy-header {
-    color: var(--text-color) !important;
-    -webkit-text-fill-color: var(--text-color) !important;
+        color: var(--text-color) !important;
+        -webkit-text-fill-color: var(--text-color) !important;
     }
 
-    /* Expander Section Headers (Active Squad & Available Wire, Standings, etc.) */
+    /* Expander Section Headers */
     div[data-testid="stExpander"] details summary p {
         font-size: 0.95rem !important;
         font-weight: 800 !important;
@@ -167,6 +134,7 @@ st.markdown("""
     .sleeper-table tr:hover {
         background-color: #F1F5F9;
     }
+    
     /* Sleeper Base Card */
     .sleeper-card {
         background: #F8FAFC;
@@ -177,7 +145,7 @@ st.markdown("""
         box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
 
-   /* Match Expander Modules (A, B, C) to .grid-frame */
+   /* Match Expander Modules to .grid-frame */
     div[data-testid="stExpander"] {
         background: #FFFFFF !important;
         border: 2px solid #94A3B8 !important;
@@ -283,13 +251,6 @@ st.markdown("""
         font-weight: 700 !important;
     }
 
-    /* Clean white inputs with dark text for legibility */
-    section[data-testid="stSidebar"] div[data-baseweb="select"] > div {
-        background-color: #FFFFFF !important;
-        color: #0F172A !important;
-        border: 1.5px solid #115E59 !important;
-        border-radius: 6px !important;
-    }
 
     /* Streak Status Badges */
     .badge-win {
@@ -313,77 +274,143 @@ st.markdown("""
         letter-spacing: 0.5px;
     }
 
-    /* Subdued divider lines */
-    section[data-testid="stSidebar"] hr {
-        border-color: rgba(255, 255, 255, 0.2) !important;
-    }
-
-    /* High Specificity Force: White Background & Teal Text for Sidebar Cards */
-    section[data-testid="stSidebar"] div.nfl-game-card {
-        background-color: #FFFFFF !important;
-        background: #FFFFFF !important;
-        border: 2px solid #CBD5E1 !important;
-        border-radius: 8px !important;
-        padding: 10px 12px !important;
-        margin-bottom: 10px !important;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.15) !important;
-    }
-
-    section[data-testid="stSidebar"] div.nfl-game-card * {
-        background-color: transparent !important;
-        color: #0F766E !important;
-        -webkit-text-fill-color: #0F766E !important;
-    }
-
-    section[data-testid="stSidebar"] div.nfl-game-card .nfl-game-header {
-        display: flex !important;
-        justify-content: space-between !important;
-        font-size: 0.72rem !important;
-        font-weight: 800 !important;
-        text-transform: uppercase !important;
-        border-bottom: 1.5px solid #E2E8F0 !important;
-        padding-bottom: 4px !important;
-        margin-bottom: 6px !important;
-    }
-
-    section[data-testid="stSidebar"] div.nfl-game-card .nfl-team-row {
-        display: flex !important;
-        justify-content: space-between !important;
-        font-size: 0.88rem !important;
-        font-weight: 600 !important;
-        margin-bottom: 3px !important;
-    }
-
-    section[data-testid="stSidebar"] div.nfl-game-card .nfl-team-row.winner * {
-        font-weight: 900 !important;
-        color: #115E59 !important;
-        -webkit-text-fill-color: #115E59 !important;
-    }
+    
 </style>
 """, unsafe_allow_html=True)
 
 # =========================================================
-# 2. CREDENTIALS & SECRETS
+# 2. CLIENT PERSISTENCE & GENAI CLIENT
 # =========================================================
-LEAGUE_ID = int(st.secrets["LEAGUE_ID"])
-YEAR = int(st.secrets["YEAR"])
-SWID = st.secrets["SWID"]
-ESPN_S2 = st.secrets["ESPN_S2"]
 API_KEY = st.secrets["GEMINI_API_KEY"]
-
-# Google GenAI Client
 client = genai.Client(api_key=API_KEY)
+
+local_storage = LocalStorage()
+
+if "active_league_profile" not in st.session_state:
+    st.session_state.active_league_profile = None
+
+def get_browser_leagues():
+    """Fetches saved leagues from the user's browser localStorage."""
+    try:
+        data = local_storage.getItem("user_espn_leagues")
+        if data and isinstance(data, dict):
+            return data
+    except Exception:
+        pass
+    return {}
+
+def save_browser_leagues(leagues_dict):
+    """Persists updated league dictionary back into user's browser."""
+    local_storage.setItem("user_espn_leagues", leagues_dict)
+
+saved_leagues = get_browser_leagues()
+
 # =========================================================
-# 3. DATA LOADING & CACHING
+# 3. LEAGUE LOGIN / SELECTION GATEWAY
 # =========================================================
+if not st.session_state.active_league_profile:
+    st.markdown("""
+    <div style="max-width: 650px; margin: 40px auto 16px auto; text-align: center;">
+        <h1 style="color: #0F172A; font-weight: 800; margin-bottom: 6px;">Scout Fantasy Football AI</h1>
+        <p style="color: #64748B; font-size: 15px;">Launch real-time analytics, AI start/sit debates, and institutional trade evaluation for your ESPN leagues.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    tab_quick_launch, tab_add_new = st.tabs(["⚡ Saved Leagues", "➕ Connect New League"])
+
+    with tab_quick_launch:
+        if saved_leagues:
+            selected_alias = st.selectbox("Select a previously saved league:", options=list(saved_leagues.keys()))
+            profile = saved_leagues[selected_alias]
+            st.caption(f"League ID: `{profile['league_id']}` | Season: `{profile['year']}`")
+
+            col_launch, col_delete = st.columns([3, 1])
+            with col_launch:
+                if st.button("Launch Dashboard", type="primary", use_container_width=True):
+                    st.session_state.active_league_profile = profile
+                    st.rerun()
+            with col_delete:
+                if st.button("Delete League", use_container_width=True):
+                    del saved_leagues[selected_alias]
+                    save_browser_leagues(saved_leagues)
+                    st.rerun()
+        else:
+            st.info("No saved leagues found on this browser. Link your first league in the 'Connect New League' tab!")
+
+    with tab_add_new:
+        with st.form("new_league_form"):
+            new_alias = st.text_input("League Nickname", placeholder="e.g. Work League or Dynasty 2026")
+            col1, col2 = st.columns(2)
+            with col1:
+                input_league_id = st.text_input("ESPN League ID", placeholder="12345678")
+            with col2:
+                input_year = st.number_input("Season Year", min_value=2020, max_value=2027, value=2026)
+
+            st.markdown("---")
+            st.markdown("##### Private League Cookies *(Leave empty if public)*")
+            input_swid = st.text_input("SWID Cookie", placeholder="{12345678-ABCD-EF01-2345-6789ABCDEF01}", type="password")
+            input_espn_s2 = st.text_input("ESPN_S2 Cookie", placeholder="AEB...", type="password")
+
+            submit_btn = st.form_submit_button("Test Connection & Launch", use_container_width=True)
+
+            if submit_btn:
+                if not new_alias.strip() or not input_league_id.strip():
+                    st.error("Please enter a League Nickname and a valid ESPN League ID.")
+                else:
+                    with st.spinner("Connecting to ESPN..."):
+                        try:
+                            test_league = League(
+                                league_id=int(input_league_id.strip()),
+                                year=int(input_year),
+                                espn_s2=input_espn_s2.strip() if input_espn_s2.strip() else None,
+                                swid=input_swid.strip() if input_swid.strip() else None
+                            )
+
+                            if not test_league.teams:
+                                st.error("Connected to ESPN, but found 0 teams in this league.")
+                            else:
+                                new_profile = {
+                                    "alias": new_alias.strip(),
+                                    "league_id": int(input_league_id.strip()),
+                                    "year": int(input_year),
+                                    "swid": input_swid.strip(),
+                                    "espn_s2": input_espn_s2.strip(),
+                                }
+                                saved_leagues[new_alias.strip()] = new_profile
+                                save_browser_leagues(saved_leagues)
+
+                                st.session_state.active_league_profile = new_profile
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"ESPN connection failed: {e}. Check your SWID & ESPN_S2 cookies if private.")
+
+        with st.expander("Where do I find my SWID and ESPN_S2 cookies?"):
+            st.markdown("""
+            1. Go to **ESPN.com** in Chrome/Firefox and log in.
+            2. Right-click anywhere and choose **Inspect**, then navigate to the **Application** (Chrome) or **Storage** (Firefox) tab.
+            3. Open **Cookies** → `https://fantasy.espn.com`.
+            4. Copy **`SWID`** (include the curly braces `{...}`).
+            5. Copy **`espn_s2`** (the full alphanumeric string).
+            """)
+
+    st.stop()
+
+# =========================================================
+# 4. DATA LOADING & CACHING
+# =========================================================
+active_cfg = st.session_state.active_league_profile
 
 @st.cache_resource(ttl=600)
-def load_espn_league():
-    return League(league_id=LEAGUE_ID, year=YEAR, espn_s2=ESPN_S2, swid=SWID)
+def load_espn_league(league_id, year, espn_s2=None, swid=None):
+    return League(
+        league_id=league_id,
+        year=year,
+        espn_s2=espn_s2 if espn_s2 else None,
+        swid=swid if swid else None
+    )
 
 @st.cache_data(ttl=600)
 def load_free_agents(_league, size=15):
-    """Caches free agent lookups to prevent network lag on tab switches."""
     try:
         return _league.free_agents(size=size)
     except Exception as e:
@@ -392,25 +419,42 @@ def load_free_agents(_league, size=15):
 
 try:
     with st.spinner("Syncing league environment..."):
-        league = load_espn_league()
-        # Uses cached lookup instead of hitting ESPN live every rerun
+        league = load_espn_league(
+            league_id=active_cfg["league_id"],
+            year=active_cfg["year"],
+            espn_s2=active_cfg.get("espn_s2"),
+            swid=active_cfg.get("swid")
+        )
         free_agents = load_free_agents(league, size=15)
 except Exception as e:
-    st.error(f"League connection failed: {e}")
+    st.error(f"Failed to load league data: {e}")
+    if st.button("Back to League Selection"):
+        st.session_state.active_league_profile = None
+        st.rerun()
     st.stop()
 
-# =========================================================
-# 3. DATA LOADING & CACHING (Add these here)
-# =========================================================
+# ESPN official Pro Team ID mapping
+ESPN_PRO_TEAMS = {
+    0: "FA", 1: "ATL", 2: "BUF", 3: "CHI", 4: "CIN", 5: "CLE", 6: "DAL",
+    7: "DEN", 8: "DET", 9: "GB", 10: "TEN", 11: "IND", 12: "KC", 13: "LV",
+    14: "LAR", 15: "MIA", 16: "MIN", 17: "NE", 18: "NO", 19: "NYG", 20: "NYJ",
+    21: "PHI", 22: "ARI", 23: "PIT", 24: "LAC", 25: "SF", 26: "SEA", 27: "TB",
+    28: "WAS", 29: "CAR", 30: "JAX", 33: "BAL", 34: "HOU"
+}
+
+def get_player_team_abbr(player):
+    raw_team = getattr(player, "proTeam", "")
+    if isinstance(raw_team, int):
+        return ESPN_PRO_TEAMS.get(raw_team, "FA")
+    if str(raw_team).isdigit():
+        return ESPN_PRO_TEAMS.get(int(raw_team), "FA")
+    team_str = str(raw_team).strip().upper()
+    return team_str if team_str else "FA"
 
 @st.cache_data(ttl=300)
 def get_trade_directory(_league, _my_team):
-    """
-    Cached player names and roster summaries for trade evaluations.
-    """
     my_players = [p.name for p in _my_team.roster]
     opponents = {}
-    
     for team in _league.teams:
         if team.team_name != _my_team.team_name:
             opponents[team.team_name] = {
@@ -418,41 +462,11 @@ def get_trade_directory(_league, _my_team):
                 "players": [p.name for p in team.roster],
                 "summary": ", ".join(f"{p.name} ({p.position})" for p in team.roster)
             }
-            
     my_summary = ", ".join(f"{p.name} ({p.position})" for p in _my_team.roster)
     return my_players, my_summary, opponents
 
-
-@st.cache_data(show_spinner=False)
-def evaluate_trade(my_team_name, opp_team_name, send_names, recv_names, my_roster_summary, opp_roster_summary):
-    prompt = f"""
-    Evaluate this proposed fantasy football trade:
-    TEAM A (Sending): {my_team_name} | Pieces: {send_names} | Squad: {my_roster_summary}
-    TEAM B (Sending): {opp_team_name} | Pieces: {recv_names} | Squad: {opp_roster_summary}
-
-    Verdict Rules:
-    - Seems Fair: Balanced value swap.
-    - Everybody Wins: Fixes positional drought cleanly on both sides.
-    - Getting Fleeced: Unbalanced overpay.
-    - Slightly Off: Minor edge to one side.
-    - Collusion Warning: Destructive imbalance.
-    """
-
-    response = client.models.generate_content(
-        model='gemini-3.5-flash',
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=TradeEvaluation,
-            tools=[],
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-        )
-    )
-    return response.text
-
 @st.cache_data(ttl=300)
 def get_debater_player_options(_my_team, _free_agents):
-    """Caches selectbox labels and player mappings for Start/Sit comparisons."""
     roster_opts = {
         f"{p.name} ({p.position} - {get_player_team_abbr(p)})": p 
         for p in _my_team.roster
@@ -463,94 +477,54 @@ def get_debater_player_options(_my_team, _free_agents):
     }
     return roster_opts, wire_opts
 
-@st.cache_data(ttl=300)
-def get_league_player_directory(_league):
-    """
-    Builds an instant, cached lookup of every rostered player in the league.
-    """
-    directory = {}
-    for team in _league.teams:
-        for p in team.roster:
-            directory[p.name] = {
-                "player_obj": p,
-                "team_name": team.team_name,
-                "position": p.position,
-                "points": getattr(p, "total_points", 0.0),
-                "projected": getattr(p, "projected_total_points", 0.0)
-            }
-    return directory
-
-# --- Identify Primary Team ---
-target_team_name = "Dakshots"
-
-my_team = next(
-    (team for team in league.teams if target_team_name.lower() in team.team_name.lower()),
-    league.teams[0]
-)
 # =========================================================
-# 4. SIDEBAR NAVIGATION & MATCHUPS
+# 5. WEATHER & NFL MATCHUPS
 # =========================================================
 import html
-import requests
-from datetime import datetime
-from zoneinfo import ZoneInfo
+from concurrent.futures import ThreadPoolExecutor
 
-st.markdown("""
-<style>
-
-
-/* 4. Ensure the selectbox input field background contrasts cleanly with black text */
-div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
-    background-color: #f8fafc !important;
-    border-radius: 6px !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
-
-
-# NFL Stadium coordinates for bulletproof live weather fallback
 STADIUM_COORDS = {
-    "ARI": (33.5276, -112.2626, True),   # State Farm Stadium (Dome)
-    "ATL": (33.7554, -84.4010, True),    # Mercedes-Benz Stadium (Dome)
-    "BAL": (39.2780, -76.6227, False),   # M&T Bank Stadium
-    "BUF": (42.7738, -78.7870, False),   # Highmark Stadium
-    "CAR": (35.2258, -80.8528, False),   # Bank of America Stadium
-    "CHI": (41.8623, -87.6167, False),   # Soldier Field
-    "CIN": (39.0955, -84.5161, False),   # Paycor Stadium
-    "CLE": (41.5061, -81.6995, False),   # Huntington Bank Field
-    "DAL": (32.7473, -97.0945, True),    # AT&T Stadium (Dome)
-    "DEN": (39.7439, -105.0201, False),  # Empower Field at Mile High
-    "DET": (42.3400, -83.0456, True),    # Ford Field (Dome)
-    "GB":  (44.5013, -88.0622, False),   # Lambeau Field
-    "HOU": (29.6847, -95.4107, True),    # NRG Stadium (Dome)
-    "IND": (39.7601, -86.1639, True),    # Lucas Oil Stadium (Dome)
-    "JAX": (30.3240, -81.6373, False),   # EverBank Stadium
-    "KC":  (39.0489, -94.4839, False),   # Arrowhead Stadium
-    "LV":  (36.0909, -115.1833, True),   # Allegiant Stadium (Dome)
-    "LAC": (33.9535, -118.3392, True),   # SoFi Stadium (Dome)
-    "LAR": (33.9535, -118.3392, True),   # SoFi Stadium (Dome)
-    "MIA": (25.9580, -80.2389, False),   # Hard Rock Stadium
-    "MIN": (44.9735, -93.2575, True),    # U.S. Bank Stadium (Dome)
-    "NE":  (42.0909, -71.2643, False),   # Gillette Stadium
-    "NO":  (29.9511, -90.0812, True),    # Caesars Superdome (Dome)
-    "NYG": (40.8128, -74.0742, False),   # MetLife Stadium
-    "NYJ": (40.8128, -74.0742, False),   # MetLife Stadium
-    "PHI": (39.9008, -75.1675, False),   # Lincoln Financial Field
-    "PIT": (40.4468, -80.0158, False),   # Acrisure Stadium
-    "SF":  (37.4033, -121.9694, False),  # Levi's Stadium
-    "SEA": (47.5952, -122.3316, False),  # Lumen Field
-    "TB":  (27.9759, -82.5033, False),   # Raymond James Stadium
-    "TEN": (36.1665, -86.7713, False),   # Nissan Stadium
-    "WAS": (38.9076, -76.8645, False),   # Northwest Stadium
+    "ARI": (33.5276, -112.2626, True),
+    "ATL": (33.7554, -84.4010, True),
+    "BAL": (39.2780, -76.6227, False),
+    "BUF": (42.7738, -78.7870, False),
+    "CAR": (35.2258, -80.8528, False),
+    "CHI": (41.8623, -87.6167, False),
+    "CIN": (39.0955, -84.5161, False),
+    "CLE": (41.5061, -81.6995, False),
+    "DAL": (32.7473, -97.0945, True),
+    "DEN": (39.7439, -105.0201, False),
+    "DET": (42.3400, -83.0456, True),
+    "GB":  (44.5013, -88.0622, False),
+    "HOU": (29.6847, -95.4107, True),
+    "IND": (39.7601, -86.1639, True),
+    "JAX": (30.3240, -81.6373, False),
+    "KC":  (39.0489, -94.4839, False),
+    "LV":  (36.0909, -115.1833, True),
+    "LAC": (33.9535, -118.3392, True),
+    "LAR": (33.9535, -118.3392, True),
+    "MIA": (25.9580, -80.2389, False),
+    "MIN": (44.9735, -93.2575, True),
+    "NE":  (42.0909, -71.2643, False),
+    "NO":  (29.9511, -90.0812, True),
+    "NYG": (40.8128, -74.0742, False),
+    "NYJ": (40.8128, -74.0742, False),
+    "PHI": (39.9008, -75.1675, False),
+    "PIT": (40.4468, -80.0158, False),
+    "SF":  (37.4033, -121.9694, False),
+    "SEA": (47.5952, -122.3316, False),
+    "TB":  (27.9759, -82.5033, False),
+    "TEN": (36.1665, -86.7713, False),
+    "WAS": (38.9076, -76.8645, False),
+}
+
+HTTP_SESSION = requests.Session()
+ESPN_HEADERS = {
+    "User-Agent": "ESPN/6.19.0 (iPhone; iOS 17.5.1; Scale/3.00)",
+    "Accept": "application/json",
 }
 
 def format_game_status_cst(event, status_obj):
-    """
-    Formats the game status/time to Central Time (CST/CDT) for scheduled games.
-    Preserves in-progress and completed statuses.
-    Cross-platform safe (Windows & Unix).
-    """
     state = status_obj.get("state", "").lower()
     raw_status = (
         status_obj.get("shortDetail")
@@ -567,7 +541,6 @@ def format_game_status_cst(event, status_obj):
         try:
             if date_str.endswith("Z"):
                 date_str = date_str[:-1] + "+00:00"
-            
             utc_dt = datetime.fromisoformat(date_str)
             central_tz = ZoneInfo("America/Chicago")
             central_dt = utc_dt.astimezone(central_tz)
@@ -581,19 +554,8 @@ def format_game_status_cst(event, status_obj):
 
     return raw_status
 
-
-from concurrent.futures import ThreadPoolExecutor
-
-# Reusable HTTP session with connection pooling
-HTTP_SESSION = requests.Session()
-ESPN_HEADERS = {
-    "User-Agent": "ESPN/6.19.0 (iPhone; iOS 17.5.1; Scale/3.00)",
-    "Accept": "application/json",
-}
-
 @st.cache_data(ttl=3600)
 def fetch_single_open_meteo_temp(lat, lon):
-    """Fetches Open-Meteo current condition code and temp with connection pooling."""
     try:
         url = (
             f"https://api.open-meteo.com/v1/forecast?"
@@ -620,28 +582,13 @@ def fetch_single_open_meteo_temp(lat, lon):
         pass
     return "☀️ 72°F"
 
-def get_live_venue_weather(home_team_abbr):
-    """Fast cache-backed lookup for Open-Meteo fallback."""
-    venue_info = STADIUM_COORDS.get(home_team_abbr.upper())
-    if not venue_info:
-        return "☀️ 72°F"
-    lat, lon, is_dome = venue_info
-    if is_dome:
-        return "🏟️ Dome"
-    return fetch_single_open_meteo_temp(lat, lon)
-
-
 @st.cache_data(ttl=120)
 def fetch_espn_master_payload():
-    """
-    Single unified network hit to ESPN.
-    Extracts games and populates the global weather map in one pass.
-    """
     url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
     games = []
     weather_map = {}
     resolved_teams = set()
-    needed_fallbacks = []  # tuples of (home_team_abbr, lat, lon)
+    needed_fallbacks = []
 
     try:
         res = HTTP_SESSION.get(url, headers=ESPN_HEADERS, timeout=4.0)
@@ -714,7 +661,6 @@ def fetch_espn_master_payload():
     except Exception as e:
         print(f"ESPN master fetch error: {e}")
 
-    # Parallelize fallback queries across threads
     if needed_fallbacks:
         with ThreadPoolExecutor(max_workers=len(needed_fallbacks)) as executor:
             future_to_team = {
@@ -731,7 +677,6 @@ def fetch_espn_master_payload():
                 weather_map[team] = badge
                 resolved_teams.add(team)
 
-    # Fast offline fill for remaining bye/unresolved teams
     for team_abbr, (_, _, is_dome) in STADIUM_COORDS.items():
         if team_abbr not in resolved_teams:
             weather_map[team_abbr] = '<span title="Indoor Dome">🏟️ Dome</span>' if is_dome else '<span title="Outdoor">☀️ 72°F</span>'
@@ -739,12 +684,10 @@ def fetch_espn_master_payload():
     weather_map["FA"] = '<span title="Free Agent / Bye">-</span>'
     weather_map[""] = '<span title="Free Agent / Bye">-</span>'
 
-    # Stitch weather badge into the game objects
     for g in games:
         g["weather_badge"] = weather_map.get(g["home_abbr"], "🏟️ Dome")
 
     return games, weather_map
-
 
 def get_nfl_scoreboard_data():
     games, _ = fetch_espn_master_payload()
@@ -754,135 +697,82 @@ def get_nfl_weather_map():
     _, weather_map = fetch_espn_master_payload()
     return weather_map
 
-    """Fetches the current week's NFL games from ESPN's scoreboard API."""
-    url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
-    headers = {
-        "User-Agent": "ESPN/6.19.0 (iPhone; iOS 17.5.1; Scale/3.00)",
-        "Accept": "application/json",
-    }
-    games = []
-
-    try:
-        res = requests.get(url, headers=headers, timeout=5)
-        if res.status_code == 200:
-            data = res.json()
-            events = data.get("events", [])
-            weather_map = get_nfl_weather_map()
-
-            for event in events:
-                status_obj = event.get("status", {})
-                status_display = format_game_status_cst(event, status_obj)
-                state = status_obj.get("state", "").lower()
-
-                comps = event.get("competitions", [{}])[0]
-                competitors = comps.get("competitors", [])
-
-                home = next((c for c in competitors if c.get("homeAway") == "home"), {})
-                away = next((c for c in competitors if c.get("homeAway") == "away"), {})
-
-                home_team = home.get("team", {})
-                away_team = away.get("team", {})
-
-                home_abbr = home_team.get("abbreviation", "TBD").upper()
-                away_abbr = away_team.get("abbreviation", "TBD").upper()
-
-                weather_badge = weather_map.get(home_abbr, weather_map.get(away_abbr, "🏟️ Dome"))
-
-                games.append({
-                    "id": event.get("id"),
-                    "state": state,
-                    "status_display": status_display,
-                    "weather_badge": weather_badge,
-                    "away_abbr": away_abbr,
-                    "away_score": away.get("score", "-"),
-                    "away_logo": away_team.get("logo", ""),
-                    "home_abbr": home_abbr,
-                    "home_score": home.get("score", "-"),
-                    "home_logo": home_team.get("logo", ""),
-                })
-    except Exception as e:
-        print(f"Error parsing scoreboard: {e}")
-
-    return games
-
-
 def render_sidebar_matchup_cards():
-    """Renders sleek, compact dark-slate/teal matchup tiles in the sidebar."""
     games = get_nfl_scoreboard_data()
     if not games:
         st.caption("No live or scheduled NFL games found.")
         return
 
     css_style = """<style>
-.matchup-card-container {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 6px;
-    margin-bottom: 12px;
-    background-color: #115E59;
-    padding: 10px;
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-}
-.matchup-card {
-    background: #0f172a;
-    border: 1px solid #1e293b;
-    border-radius: 6px;
-    padding: 8px 10px;
-    transition: border-color 0.15s ease-in-out;
-}
-.matchup-card:hover {
-    border-color: #2dd4bf;
-}
-.matchup-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.72rem;
-    color: #94a3b8;
-    margin-bottom: 6px;
-    border-bottom: 1px solid #1e293b;
-    padding-bottom: 4px;
-}
-.matchup-status-live {
-    color: #2dd4bf;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-}
-.matchup-status-sched {
-    color: #f8fafc;
-    font-weight: 500;
-}
-.matchup-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 2px 0;
-    font-size: 0.85rem;
-}
-.matchup-team-cell {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    color: #f8fafc;
-    font-weight: 600;
-}
-.matchup-team-logo {
-    width: 18px;
-    height: 18px;
-    object-fit: contain;
-}
-.matchup-score {
-    font-weight: 700;
-    color: #f8fafc;
-    font-variant-numeric: tabular-nums;
-}
-.matchup-score-faded {
-    color: #64748b;
-    font-weight: 400;
-}
-</style>"""
+    .matchup-card-container {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 6px;
+        margin-bottom: 12px;
+        background-color: #115E59;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    .matchup-card {
+        background: #0f172a;
+        border: 1px solid #1e293b;
+        border-radius: 6px;
+        padding: 8px 10px;
+        transition: border-color 0.15s ease-in-out;
+    }
+    .matchup-card:hover {
+        border-color: #2dd4bf;
+    }
+    .matchup-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.72rem;
+        color: #94a3b8;
+        margin-bottom: 6px;
+        border-bottom: 1px solid #1e293b;
+        padding-bottom: 4px;
+    }
+    .matchup-status-live {
+        color: #2dd4bf;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+    }
+    .matchup-status-sched {
+        color: #f8fafc;
+        font-weight: 500;
+    }
+    .matchup-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 2px 0;
+        font-size: 0.85rem;
+    }
+    .matchup-team-cell {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: #f8fafc;
+        font-weight: 600;
+    }
+    .matchup-team-logo {
+        width: 18px;
+        height: 18px;
+        object-fit: contain;
+    }
+    .matchup-score {
+        font-weight: 700;
+        color: #f8fafc;
+        font-variant-numeric: tabular-nums;
+    }
+    .matchup-score-faded {
+        color: #64748b;
+        font-weight: 400;
+    }
+    </style>"""
 
     cards = []
     for g in games:
@@ -917,88 +807,151 @@ def render_sidebar_matchup_cards():
         )
         cards.append(card)
 
-    markup = (
-        f'{css_style}'
-        f'<div class="matchup-card-container">'
-        f'{"".join(cards)}'
-        f'</div>'
-    )
-
+    markup = f'{css_style}<div class="matchup-card-container">{"".join(cards)}</div>'
     if hasattr(st, "html"):
         st.html(markup)
     else:
         st.markdown(markup, unsafe_allow_html=True)
 
-
-
-# Single unified sidebar block
+# =========================================================
+# 6. SIDEBAR NAVIGATION & LEAGUE SWITCHER
+# =========================================================
 with st.sidebar:
-    # High-specificity CSS
     st.markdown("""
     <style>
-    /* Scope black bold uppercase ONLY to the selectbox dropdown */
-    div[data-testid="stSelectbox"] div[data-baseweb="select"] * {
-        font-weight: 800 !important;
-        color: #000000 !important;
-        text-transform: uppercase !important;
-    }
-    div[data-baseweb="popover"] ul[role="listbox"] li[role="option"] * {
-        font-weight: 800 !important;
-        color: #000000 !important;
-        text-transform: uppercase !important;
-    }
-    div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
-        background-color: #f8fafc !important;
-        border-radius: 6px !important;
+    /* 1. Main dropdown container */
+    section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+        background: linear-gradient(135deg, #0B132B 0%, #0F172A 60%, #064E3B 100%) !important;
+        border: 1.5px solid rgba(45, 212, 191, 0.45) !important;
+        border-radius: 8px !important;
+        box-shadow: 0 4px 14px rgba(2, 6, 23, 0.45), 0 0 10px rgba(15, 118, 110, 0.2) !important;
+        transition: all 0.2s ease-in-out !important;
+        padding-right: 6px !important;
     }
 
-    /* --- EXPANDER HEADER DEEP TEAL OVERRIDE --- */
-    /* Target expander summary text with deep container teal #115E59 */
+    section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:hover,
+    section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:focus-within {
+        border-color: #2DD4BF !important;
+        box-shadow: 0 0 14px rgba(45, 212, 191, 0.45) !important;
+    }
+
+    /* 2. Text styling: solid white regardless of light/dark mode */
+    section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div[data-baseweb="select"] *,
+    section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div[role="combobox"] * {
+        color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
+        font-weight: 700 !important;
+        font-size: 0.88rem !important;
+        text-transform: none !important;
+    }
+
+    /* 3. Transform the right-hand icon container into a clean down chevron */
+    section[data-testid="stSidebar"] div[data-testid="stSelectbox"] svg {
+        display: block !important;
+        width: 18px !important;
+        height: 18px !important;
+        fill: #2DD4BF !important;
+        color: #2DD4BF !important;
+        stroke: #2DD4BF !important;
+    }
+
+    /* If the icon is an empty/generic square or BaseWeb path, reshape it to a down arrow */
+    section[data-testid="stSidebar"] div[data-testid="stSelectbox"] svg path {
+        d: path("M6 9l6 6 6-6") !important;
+        fill: none !important;
+        stroke: #2DD4BF !important;
+        stroke-width: 2.5 !important;
+        stroke-linecap: round !important;
+        stroke-linejoin: round !important;
+    }
+
+    /* 4. Dropdown Popover (when open) */
+    div[data-baseweb="popover"] ul[role="listbox"] {
+        background-color: #0B132B !important;
+        border: 1.5px solid rgba(45, 212, 191, 0.45) !important;
+        border-radius: 8px !important;
+        padding: 6px !important;
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6) !important;
+    }
+
+    div[data-baseweb="popover"] ul[role="listbox"] li[role="option"] {
+        background: transparent !important;
+        border-radius: 6px !important;
+        padding: 8px 12px !important;
+        margin-bottom: 2px !important;
+    }
+
+    div[data-baseweb="popover"] ul[role="listbox"] li[role="option"] * {
+        color: #F8FAFC !important;
+        -webkit-text-fill-color: #F8FAFC !important;
+        font-weight: 600 !important;
+        font-size: 0.88rem !important;
+        text-transform: none !important;
+    }
+
+    div[data-baseweb="popover"] ul[role="listbox"] li[role="option"]:hover,
+    div[data-baseweb="popover"] ul[role="listbox"] li[role="option"][aria-selected="true"] {
+        background: linear-gradient(90deg, rgba(15, 118, 110, 0.6), rgba(45, 212, 191, 0.25)) !important;
+    }
+
+    div[data-baseweb="popover"] ul[role="listbox"] li[role="option"]:hover *,
+    div[data-baseweb="popover"] ul[role="listbox"] li[role="option"][aria-selected="true"] * {
+        color: #2DD4BF !important;
+        -webkit-text-fill-color: #2DD4BF !important;
+    }
+
+    /* Expander styling */
     [data-testid="stExpander"] summary,
-    [data-testid="stExpander"] summary *,
-    [data-testid="stExpander"] summary p,
-    [data-testid="stExpander"] summary span,
-    [data-testid="stExpander"] summary div,
-    [data-testid="stExpanderToggleIcon"] ~ div,
-    [data-testid="stExpanderToggleIcon"] ~ div * {
+    [data-testid="stExpander"] summary * {
         color: #115E59 !important;
         -webkit-text-fill-color: #115E59 !important;
         font-weight: 700 !important;
-        letter-spacing: 0.02em !important;
-    }
-
-    /* Target the expander chevron icon with matching deep teal */
-    [data-testid="stExpander"] summary svg,
-    [data-testid="stExpander"] summary svg path {
-        fill: #115E59 !important;
-        stroke: #115E59 !important;
-        color: #115E59 !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-    st.markdown(f"### {league.settings.name}")
-    st.caption(f"ESPN Season {YEAR} • {len(league.teams)} Clubs")
+    # --- Instant Multi-League Toggle ---
+    if len(saved_leagues) > 1:
+        st.markdown("<div class='meta-caption' style='color:#FFFFFF;'>Switch League</div>", unsafe_allow_html=True)
+        current_alias_match = next(
+            (alias for alias, cfg in saved_leagues.items() if cfg["league_id"] == active_cfg["league_id"]),
+            list(saved_leagues.keys())[0]
+        )
+        selected_alias = st.selectbox(
+            "League Switcher",
+            options=list(saved_leagues.keys()),
+            index=list(saved_leagues.keys()).index(current_alias_match),
+            label_visibility="collapsed"
+        )
+        if selected_alias != current_alias_match:
+            st.session_state.active_league_profile = saved_leagues[selected_alias]
+            st.rerun()
 
+    st.markdown(f"### {league.settings.name}")
+    st.caption(f"ESPN Season {active_cfg['year']} • {len(league.teams)} Clubs")
+
+    # Dynamic Roster Selector (Defaults to Dakshots or Kittle Diddle)
     team_options = {team.team_name: team for team in league.teams}
     team_list = list(team_options.keys())
 
-    dakshots_idx = next(
-        (i for i, name in enumerate(team_list) if "dakshots" in name.lower()),
+    # Detect either franchise name automatically
+    preferred_idx = next(
+        (
+            i for i, name in enumerate(team_list)
+            if "dakshots" in name.lower() or "kittle diddle" in name.lower()
+        ),
         0
     )
 
     selected_team_name = st.selectbox(
         "Active Roster",
         options=team_list,
-        index=dakshots_idx,
-        format_func=lambda name: str(name).upper(),
+        index=preferred_idx,
         key="sidebar_active_roster_select"
     )
     my_team = team_options[selected_team_name]
 
     st.divider()
-
     st.markdown("<div class='meta-caption'>Workspace</div>", unsafe_allow_html=True)
 
     active_page = st.radio(
@@ -1017,48 +970,200 @@ with st.sidebar:
 
     with st.expander("Weekly NFL Matchups", expanded=True):
         render_sidebar_matchup_cards()
+
+    if st.button("🚪 Disconnect / Add League", use_container_width=True):
+        st.session_state.active_league_profile = None
+        st.rerun()
+
 # =========================================================
-# 5. DYNAMIC HERO TOP BAR
+# 7. DYNAMIC HERO BRAND BAR & LOGO
 # =========================================================
-st.markdown(f"""
-<div class="hero-banner">
-    <div class="hero-title">{active_page}</div>
-    <div class="hero-tag">{my_team.team_name}</div>
+import textwrap
+
+hero_markup = textwrap.dedent(f"""
+<style>
+.scout-header-card {{
+    background: linear-gradient(135deg, #0B132B 0%, #0F172A 45%, #0F766E 100%);
+    border: 1.5px solid #115E59;
+    border-radius: 12px;
+    padding: 20px 26px;
+    margin-bottom: 24px;
+    box-shadow: 0 10px 30px -5px rgba(2, 6, 23, 0.5), 0 0 20px 0 rgba(15, 118, 110, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    position: relative;
+    overflow: hidden;
+}}
+
+.scout-header-card::after {{
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 320px;
+    height: 100%;
+    background: radial-gradient(circle at top right, rgba(15, 118, 110, 0.35), transparent 70%);
+    pointer-events: none;
+}}
+
+.brand-identity {{
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    z-index: 1;
+}}
+
+.brand-icon-wrapper {{
+    background: linear-gradient(145deg, #115E59, #0F766E);
+    border: 1.5px solid rgba(255, 255, 255, 0.3);
+    border-radius: 10px;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 14px rgba(15, 118, 110, 0.35);
+}}
+
+.brand-title-wrap {{
+    display: flex;
+    flex-direction: column;
+}}
+
+.brand-row {{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}}
+
+.brand-name {{
+    font-size: 1.55rem;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    color: #FFFFFF !important;
+    text-transform: uppercase;
+    margin: 0;
+    line-height: 1.1;
+}}
+
+.ai-badge {{
+    background: #115E59;
+    color: #FFFFFF !important;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    font-size: 0.7rem;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    box-shadow: 0 0 10px rgba(15, 118, 110, 0.4);
+}}
+
+.brand-tagline {{
+    font-size: 0.82rem;
+    color: #94A3B8 !important;
+    font-weight: 500;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}}
+
+.context-meta {{
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 1;
+}}
+
+.status-indicator {{
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(15, 23, 42, 0.65);
+    border: 1px solid rgba(15, 118, 110, 0.45);
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #2DD4BF !important;
+    letter-spacing: 0.03em;
+}}
+
+.pulse-dot {{
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background-color: #2DD4BF;
+    box-shadow: 0 0 8px #2DD4BF;
+}}
+
+.team-pill {{
+    background: #115E59;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #FFFFFF !important;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    box-shadow: 0 2px 8px rgba(15, 118, 110, 0.25);
+}}
+</style>
+
+<div class="scout-header-card">
+    <div class="brand-identity">
+        <div class="brand-icon-wrapper">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+            </svg>
+        </div>
+        <div class="brand-title-wrap">
+            <div class="brand-row">
+                <span class="brand-name">Fantasy AI Scout</span>
+                <span class="ai-badge">PRO EDITION</span>
+            </div>
+            <div class="brand-tagline">
+                <span>{active_page}</span>
+                <span>•</span>
+                <span>ESPN Week {league.current_week}</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="context-meta">
+        <div class="status-indicator">
+            <span class="pulse-dot"></span>
+            <span>GEMINI 3.5 FLASH ENGINE</span>
+        </div>
+        <div class="team-pill">
+            {my_team.team_name}
+        </div>
+    </div>
 </div>
-""", unsafe_allow_html=True)
+""")
+
+if hasattr(st, "html"):
+    st.html(hero_markup)
+else:
+    st.markdown(hero_markup, unsafe_allow_html=True)
 
 # =========================================================
-# 6. PERSISTENT LEAGUE MODULES (COLLAPSIBLE)
+# 8. PERSISTENT LEAGUE MODULES (COLLAPSIBLE)
 # =========================================================
-def get_player_team_abbr(player):
-    """Accurately resolves a player's real NFL team abbreviation."""
-    raw_team = getattr(player, "proTeam", "")
-    if isinstance(raw_team, int):
-        return ESPN_PRO_TEAMS.get(raw_team, "FA")
-    if str(raw_team).isdigit():
-        return ESPN_PRO_TEAMS.get(int(raw_team), "FA")
-    team_str = str(raw_team).strip().upper()
-    return team_str if team_str else "FA"
-
 def get_weekly_projected_points(player, week_num):
-    """
-    Extracts the player's weekly projected fantasy points from espn-api.
-    Checks player.stats[week_num]['projected_points'], then player.projected_points.
-    """
     stats_dict = getattr(player, "stats", {})
     if isinstance(stats_dict, dict) and week_num in stats_dict:
         week_stat = stats_dict[week_num]
         if isinstance(week_stat, dict) and "projected_points" in week_stat:
             return float(week_stat["projected_points"])
-    
-    # Fallback if espn-api unpacked the current matchup directly onto player.projected_points
     direct_proj = getattr(player, "projected_points", None)
     if direct_proj is not None and direct_proj > 0.0:
         return float(direct_proj)
-        
     return 0.0
 
-# --- Build Roster Table Rows ---
 weather_map = get_nfl_weather_map()
 
 roster_rows = []
@@ -1066,13 +1171,10 @@ for p in my_team.roster:
     team_abbr = get_player_team_abbr(p)
     wx_badge = weather_map.get(team_abbr, "☀️ 70°F")
     slot = getattr(p, "lineupSlot", "BE")
-    
-    # Projected and Total Points
     proj_val = getattr(p, "projected_points", None)
     if proj_val is None:
         proj_val = getattr(p, "projected_total_points", 0.0)
     proj_pts = f"{float(proj_val):.1f}"
-    
     total_pts = f"{getattr(p, 'total_points', 0.0):.1f}"
     
     row_html = f"""
@@ -1088,18 +1190,14 @@ for p in my_team.roster:
     """
     roster_rows.append(row_html)
 
-# --- Build Free Agent Table Rows ---
 fa_rows = []
 for p in free_agents:
     team_abbr = get_player_team_abbr(p)
     wx_badge = weather_map.get(team_abbr, "-")
-    
-    # Projected and Total Points
     proj_val = getattr(p, "projected_points", None)
     if proj_val is None:
         proj_val = getattr(p, "projected_total_points", 0.0)
     proj_pts = f"{float(proj_val):.1f}"
-    
     total_pts = f"{getattr(p, 'total_points', 0.0):.1f}"
     
     row_html = f"""
@@ -1114,18 +1212,13 @@ for p in free_agents:
     """
     fa_rows.append(row_html)
 
-# --- Module A: Squad & Wire Grids (Scrollable with Weather Icons) ---
-weather_map = get_nfl_weather_map()
-
 def resolve_player_wx(player):
-    """Safely retrieves weather badge by player proTeam abbreviation."""
     raw_team = getattr(player, "proTeam", "")
     team_str = str(raw_team).strip().upper()
     return weather_map.get(team_str, "☀️ 70°F")
 
 with st.expander("Active Squad & Available Wire", expanded=False):
     col1, col2 = st.columns(2)
-    
     with col1:
         st.markdown(f"""
         <div class="grid-frame">
@@ -1176,7 +1269,7 @@ with st.expander("Active Squad & Available Wire", expanded=False):
             f'<div class="table-scroll-container">{df_fa.to_html(classes="sleeper-table", index=False, escape=False)}</div>',
             unsafe_allow_html=True
         )
-# --- Module B: Matchup Scoreboard ---
+
 with st.expander(f"Weekly Matchup Scoreboard (Week {league.current_week})", expanded=False):
     selected_week = st.slider("Select Matchup Week", min_value=1, max_value=18, value=int(league.current_week))
     try:
@@ -1206,11 +1299,8 @@ with st.expander(f"Weekly Matchup Scoreboard (Week {league.current_week})", expa
     except Exception as err:
         st.warning(f"Could not load box scores for Week {selected_week}: {err}")
 
-
-# --- Module C: League Standings (Scrollable with Sticky Styled Headers) ---
 with st.expander("Championship Standings", expanded=False):
     def get_manager_name(team):
-        """Extracts manager name reliably from ESPN API team object."""
         owners = getattr(team, "owners", None)
         if owners and isinstance(owners, list) and len(owners) > 0:
             first_owner = owners[0]
@@ -1222,23 +1312,18 @@ with st.expander("Championship Standings", expanded=False):
                 return full if full else (display if display else "Manager")
             elif isinstance(first_owner, str):
                 return first_owner
-        
         for attr in ["owner", "primary_owner", "manager"]:
             val = getattr(team, attr, None)
             if val and isinstance(val, str):
                 return val
-                
         return "Manager"
 
     def format_streak(streak_type, streak_length):
-        """Returns colored badge HTML based on Win/Loss streak."""
         st_type = str(streak_type).strip().upper()
         length = str(streak_length).strip()
         label = f"{st_type} {length}".strip()
-
         if not label:
             return "-"
-        
         if "WIN" in st_type or st_type == "W":
             return f'<span class="badge-win">{label}</span>'
         elif "LOSS" in st_type or st_type == "L":
@@ -1268,10 +1353,8 @@ with st.expander("Championship Standings", expanded=False):
         unsafe_allow_html=True
     )
 
-    # --- Module D: Recent League Activity (Adds, Drops & Trades) ---
 with st.expander("Recent League Activity", expanded=False):
     def format_activity_badge(action_type):
-        """Returns colored status badge for waiver/roster transaction types."""
         act = str(action_type).strip().upper()
         if "ADD" in act or "CLAIMED" in act:
             return f'<span class="badge-win" style="background-color: rgba(15, 118, 110, 0.15); color: #0F766E; border: 1px solid #0F766E; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 0.75rem;">ADDED</span>'
@@ -1282,12 +1365,9 @@ with st.expander("Recent League Activity", expanded=False):
         return f'<span style="color: #64748B; font-size: 0.75rem;">{act}</span>'
 
     activity_rows = []
-    
     try:
-        # Fetch up to 25 recent transactions from ESPN API
         recent_activities = league.recent_activity(size=25)
         for act in recent_activities:
-            # Timestamp conversion (milliseconds to readable CST string)
             date_display = "-"
             raw_date = getattr(act, "date", None)
             if raw_date:
@@ -1300,7 +1380,6 @@ with st.expander("Recent League Activity", expanded=False):
                 except Exception:
                     date_display = str(raw_date)[:16]
 
-            # Parse actions / players involved
             actions = getattr(act, "actions", [])
             for team, action_type, player, bid in actions:
                 team_name = getattr(team, "team_name", str(team)) if team else "Free Agent"
@@ -1308,7 +1387,6 @@ with st.expander("Recent League Activity", expanded=False):
                 pos = getattr(player, "position", "")
                 pro_team = getattr(player, "proTeam", "")
                 player_label = f"{player_name} ({pos} - {pro_team})" if pos else player_name
-
                 faab_display = f"${bid}" if bid and bid > 0 else "-"
 
                 activity_rows.append({
@@ -1333,7 +1411,7 @@ with st.expander("Recent League Activity", expanded=False):
 st.divider()
 
 # =========================================================
-# 7. PYDANTIC SCHEMAS & VERDICT PALETTES
+# 9. PYDANTIC SCHEMAS & VERDICT PALETTES
 # =========================================================
 class WaiverRecommendation(BaseModel):
     drop_player: str
@@ -1360,16 +1438,6 @@ class TradeEvaluation(BaseModel):
     risk_factors: list[str]
     bottom_line: str
 
-class PositionInsight(BaseModel):
-    position: str
-    status: Literal["CRITICAL_DROUGHT", "BALANCED", "SURPLUS_AVAILABLE"]
-    advice: str
-
-class ScarcityReport(BaseModel):
-    executive_summary: str
-    hardest_position_to_acquire: str
-    insights: list[PositionInsight]
-
 SLEEPER_VERDICTS = {
     "Seems Fair": {"bg": "#ECFDF5", "text": "#065F46", "border": "#10B981"},
     "Everybody Wins": {"bg": "#EFF6FF", "text": "#1E40AF", "border": "#3B82F6"},
@@ -1378,22 +1446,32 @@ SLEEPER_VERDICTS = {
     "Collusion Warning": {"bg": "#FEF2F2", "text": "#991B1B", "border": "#EF4444"},
 }
 
-STATUS_TAGS = {
-    "CRITICAL_DROUGHT": {"bg": "#FEF2F2", "text": "#991B1B", "border": "#EF4444", "label": "Critical Drought"},
-    "BALANCED": {"bg": "#EFF6FF", "text": "#1E40AF", "border": "#3B82F6", "label": "Balanced"},
-    "SURPLUS_AVAILABLE": {"bg": "#ECFDF5", "text": "#065F46", "border": "#10B981", "label": "Surplus Wire"}
-}
+@st.cache_data(show_spinner=False)
+def evaluate_trade(my_team_name, opp_team_name, send_names, recv_names, my_roster_summary, opp_roster_summary):
+    prompt = f"""
+    Evaluate this proposed fantasy football trade:
+    TEAM A (Sending): {my_team_name} | Pieces: {send_names} | Squad: {my_roster_summary}
+    TEAM B (Sending): {opp_team_name} | Pieces: {recv_names} | Squad: {opp_roster_summary}
 
-# ESPN official Pro Team ID mapping (overrides outdated package defaults)
-ESPN_PRO_TEAMS = {
-    0: "FA", 1: "ATL", 2: "BUF", 3: "CHI", 4: "CIN", 5: "CLE", 6: "DAL",
-    7: "DEN", 8: "DET", 9: "GB", 10: "TEN", 11: "IND", 12: "KC", 13: "LV",
-    14: "LAR", 15: "MIA", 16: "MIN", 17: "NE", 18: "NO", 19: "NYG", 20: "NYJ",
-    21: "PHI", 22: "ARI", 23: "PIT", 24: "LAC", 25: "SF", 26: "SEA", 27: "TB",
-    28: "WAS", 29: "CAR", 30: "JAX", 33: "BAL", 34: "HOU"
-}
+    Verdict Rules:
+    - Seems Fair: Balanced value swap.
+    - Everybody Wins: Fixes positional drought cleanly on both sides.
+    - Getting Fleeced: Unbalanced overpay.
+    - Slightly Off: Minor edge to one side.
+    - Collusion Warning: Destructive imbalance.
+    """
 
-
+    response = client.models.generate_content(
+        model='gemini-3.5-flash',
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=TradeEvaluation,
+            tools=[],
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+        )
+    )
+    return response.text
 
 # =========================================================
 # PAGE 1: WAIVER WIRE SCOUT
@@ -1404,7 +1482,6 @@ if active_page == "Waiver Wire Scout":
 
     if st.button("Run Waiver Analysis"):
         with st.spinner("Scouting wire candidates..."):
-            client = genai.Client(api_key=API_KEY)
             prompt = f"""
             Analyze this Fantasy Football squad and suggest moves based on the available waiver wire pool.
             Team: {my_team.team_name}
@@ -1413,32 +1490,26 @@ if active_page == "Waiver Wire Scout":
             Tone: Sharp, quantitative, no introductory fluff.
             """
 
-            # 1. Stream the model's response while keeping response_schema intact
-        response_stream = client.models.generate_content_stream(
-            model="gemini-3.5-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=ScoutReport,
-                tools=[],
-                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+            response_stream = client.models.generate_content_stream(
+                model="gemini-3.5-flash",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=ScoutReport,
+                    tools=[],
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+                )
             )
-        )
 
-        # 2. Accumulate the streamed chunks
-        chunks = []
-        with st.status("Analyzing match-up data...", expanded=False) as status:
-            for chunk in response_stream:
-                if chunk.text:
-                    chunks.append(chunk.text)
-            status.update(label="Scout report ready!", state="complete", expanded=False)
+            chunks = []
+            with st.status("Analyzing match-up data...", expanded=False) as status:
+                for chunk in response_stream:
+                    if chunk.text:
+                        chunks.append(chunk.text)
+                status.update(label="Scout report ready!", state="complete", expanded=False)
 
-        # 3. Parse JSON directly into your ScoutReport object
-        raw_json = "".join(chunks)
-        report = ScoutReport.model_validate_json(raw_json)
-
-        # If your template was referencing full_report_text.team_summary, assign it:
-        full_report_text = report
+            raw_json = "".join(chunks)
+            full_report_text = ScoutReport.model_validate_json(raw_json)
 
         st.markdown(f"""
         <div class='callout-box'>
@@ -1469,26 +1540,19 @@ if active_page == "Waiver Wire Scout":
 # =========================================================
 # PAGE 2: START/SIT DEBATER
 # =========================================================
-
 elif active_page == "Start/Sit Debater":
     st.markdown('<div class="start-sit-header">Start / Sit Debater</div>', unsafe_allow_html=True)
 
-    # Instant cached option lookups (no loop overhead on reruns)
     roster_options, wire_options = get_debater_player_options(my_team, free_agents)
     roster_names = list(roster_options.keys())
     wire_names = list(wire_options.keys())
 
-    # --- 2-Column Dilemma Interface ---
     col_roster, col_wire = st.columns(2, gap="large")
 
     chosen_p1, chosen_p2 = None, None
     debate_trigger = False
     debate_mode = ""
 
-
-    # -------------------------------------------------------------
-    # Column 1: Roster vs Roster
-    # -------------------------------------------------------------
     with col_roster:
         st.markdown("""
         <div style="background: #FFFFFF; border: 2px solid #CBD5E1; border-radius: 8px; padding: 18px; margin-bottom: 14px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);">
@@ -1503,21 +1567,11 @@ elif active_page == "Start/Sit Debater":
 
         idx_p2 = 1 if len(roster_names) > 1 else 0
 
-        p1_r_name = st.selectbox(
-            "Primary Roster Option",
-            options=roster_names,
-            index=0,
-            key="r_vs_r_p1"
-        )
-        p2_r_name = st.selectbox(
-            "Alternative Roster Option",
-            options=roster_names,
-            index=idx_p2,
-            key="r_vs_r_p2"
-        )
+        p1_r_name = st.selectbox("Primary Roster Option", options=roster_names, index=0, key="r_vs_r_p1")
+        p2_r_name = st.selectbox("Alternative Roster Option", options=roster_names, index=idx_p2, key="r_vs_r_p2")
 
         st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
-        if st.button("⚖️ Debate Internal Roster", width='content', key="btn_debate_roster"):
+        if st.button("⚖️ Debate Internal Roster", key="btn_debate_roster"):
             if p1_r_name == p2_r_name:
                 st.warning("Please choose two different players to debate.")
             else:
@@ -1526,9 +1580,6 @@ elif active_page == "Start/Sit Debater":
                 debate_trigger = True
                 debate_mode = "Roster vs Roster"
 
-    # -------------------------------------------------------------
-    # Column 2: Roster vs Waiver Wire
-    # -------------------------------------------------------------
     with col_wire:
         st.markdown("""
         <div style="background: #FFFFFF; border: 2px solid #CBD5E1; border-radius: 8px; padding: 18px; margin-bottom: 14px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);">
@@ -1541,34 +1592,20 @@ elif active_page == "Start/Sit Debater":
         </div>
         """, unsafe_allow_html=True)
 
-        p1_w_name = st.selectbox(
-            "Current Roster Player",
-            options=roster_names,
-            index=0,
-            key="r_vs_w_p1"
-        )
-        p2_w_name = st.selectbox(
-            "Available Wire Prospect",
-            options=wire_names,
-            index=0,
-            key="r_vs_w_p2"
-        )
+        p1_w_name = st.selectbox("Current Roster Player", options=roster_names, index=0, key="r_vs_w_p1")
+        p2_w_name = st.selectbox("Available Wire Prospect", options=wire_names, index=0, key="r_vs_w_p2")
 
         st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
-        if st.button("🔍 Debate Wire Pivot", width='content', key="btn_debate_wire"):
+        if st.button("🔍 Debate Wire Pivot", key="btn_debate_wire"):
             chosen_p1 = roster_options[p1_w_name]
             chosen_p2 = wire_options[p2_w_name]
             debate_trigger = True
             debate_mode = "Roster vs Waiver Wire"
 
-    # -------------------------------------------------------------
-    # Render AI Evaluation & Metrics on Trigger
-    # -------------------------------------------------------------
     if debate_trigger and chosen_p1 and chosen_p2:
         st.divider()
         st.markdown(f"<div class='meta-caption'>Evaluation Matrix: {debate_mode}</div>", unsafe_allow_html=True)
 
-        # 1. Metric Cards Side-by-Side
         m1, m2 = st.columns(2)
         wx_map = get_nfl_weather_map()
 
@@ -1603,13 +1640,11 @@ elif active_page == "Start/Sit Debater":
 
         st.markdown("<div style='margin-top: 16px;'></div>", unsafe_allow_html=True)
 
-        # 2. AI Recommendation Generation
         with st.spinner(f"Analyzing match-up dynamics and weather conditions for {chosen_p1.name} vs {chosen_p2.name}..."):
             try:
                 p1_wx = wx_map.get(p1_team, "Outdoor / Fair")
                 p2_wx = wx_map.get(p2_team, "Outdoor / Fair")
 
-                # Full team lookup for unmistakable AI grounding
                 team_names = {
                     "PIT": "Pittsburgh Steelers", "SEA": "Seattle Seahawks",
                     "CHI": "Chicago Bears", "GB": "Green Bay Packers",
@@ -1632,10 +1667,7 @@ elif active_page == "Start/Sit Debater":
                 p1_full_team = team_names.get(p1_team, p1_team)
                 p2_full_team = team_names.get(p2_team, p2_team)
 
-                # Construct prompt for AI evaluation
                 import re
-                
-                # Strip out HTML tags like <span title="..."> from weather variables so they don't leak
                 p1_clean_wx = re.sub(r'<[^>]*>', '', str(p1_wx)).strip()
                 p2_clean_wx = re.sub(r'<[^>]*>', '', str(p2_wx)).strip()
 
@@ -1673,7 +1705,6 @@ elif active_page == "Start/Sit Debater":
                 - Keep it quantitative, punchy, and direct.
                 """
 
-                # Inject card styling targeting the native Streamlit container
                 st.markdown("""
                 <style>
                 div[data-testid="stVerticalBlock"]:has(> div.debater-sentinel) {
@@ -1690,9 +1721,7 @@ elif active_page == "Start/Sit Debater":
 
                 card = st.container()
                 with card:
-                    # Invisible marker tag that gives the container its custom card border and background
                     st.markdown('<div class="debater-sentinel" style="display:none;"></div>', unsafe_allow_html=True)
-                    
                     chat = client.chats.create(model="gemini-3.5-flash")
                     response_stream = chat.send_message_stream(prompt)
 
@@ -1705,6 +1734,7 @@ elif active_page == "Start/Sit Debater":
 
             except Exception as ex:
                 st.error(f"AI Debater Service Unavailable: {ex}")
+
 # =========================================================
 # PAGE 3: TRADE EVALUATOR
 # =========================================================
@@ -1712,7 +1742,6 @@ elif active_page == "Trade Evaluator":
     st.markdown("<div class='trade-evaluation-header'>Trade Desk Evaluator</div>", unsafe_allow_html=True)
     st.markdown("<div class='meta-caption'>Multi-Player Equity & Depth Chart Impact</div>", unsafe_allow_html=True)
 
-    # 1. Instant cached dictionary lookup
     my_player_names, my_roster_summary, opponents_data = get_trade_directory(league, my_team)
 
     opponent_options = list(opponents_data.keys())
@@ -1721,17 +1750,10 @@ elif active_page == "Trade Evaluator":
 
     col_trade_a, col_trade_b = st.columns(2)
     with col_trade_a:
-        your_trade_pieces = st.multiselect(
-            f"{my_team.team_name} Sends",
-            options=my_player_names
-        )
+        your_trade_pieces = st.multiselect(f"{my_team.team_name} Sends", options=my_player_names)
     with col_trade_b:
-        opp_trade_pieces = st.multiselect(
-            f"{opponent_team_name} Sends",
-            options=opponent_team["players"]
-        )
+        opp_trade_pieces = st.multiselect(f"{opponent_team_name} Sends", options=opponent_team["players"])
 
-    # 2. Action trigger & execution
     if st.button("Evaluate Trade Equity"):
         if not your_trade_pieces and not opp_trade_pieces:
             st.warning("Please select at least one player to evaluate.")
@@ -1747,7 +1769,6 @@ elif active_page == "Trade Evaluator":
                 )
                 trade_res = TradeEvaluation.model_validate_json(trade_result_json)
 
-            # --- Results Rendering (MUST BE INDENTED HERE) ---
             verdict_style = SLEEPER_VERDICTS.get(
                 trade_res.verdict, 
                 {"bg": "#F1F5F9", "text": "#0F172A", "border": "#94A3B8"}
@@ -1796,6 +1817,7 @@ elif active_page == "Trade Evaluator":
                 st.markdown("<div class='section-title' style='margin-top: 14px;'>Identified Variables</div>", unsafe_allow_html=True)
                 for risk in trade_res.risk_factors:
                     st.markdown(f"<div style='font-size: 14px; color: #334155; margin-bottom: 6px;'>• {risk}</div>", unsafe_allow_html=True)
+
 # =========================================================
 # PAGE 4: POSITIONAL ECONOMY & LEAGUE MARKET
 # =========================================================
@@ -1803,7 +1825,6 @@ elif active_page == "Positional Economy":
     st.markdown("<div class='positional-economy-header'>League Market Economics</div>", unsafe_allow_html=True)
     st.markdown("<div class='meta-caption'>Asset Allocation, Efficiency, Market Velocity & Scarcity</div>", unsafe_allow_html=True)
 
-    # 4 Dedicated Tabs
     tab_alloc, tab_efficiency, tab_liquidity, tab_scarcity = st.tabs([
         "Asset Allocation", 
         "Capital Productivity", 
@@ -1811,29 +1832,18 @@ elif active_page == "Positional Economy":
         "VORP Scarcity Curves"
     ])
 
-    # ---------------------------------------------------------
-    # TAB 1: ASSET ALLOCATION (POSITION HOARDING)
-    # ---------------------------------------------------------
     with tab_alloc:
         st.markdown("<div class='meta-caption'>Positional Roster Share Per Franchise</div>", unsafe_allow_html=True)
-        
         alloc_data = []
         for t in league.teams:
             pos_counts = {"QB": 0, "RB": 0, "WR": 0, "TE": 0, "K": 0, "D/ST": 0}
             for p in t.roster:
                 pos = p.position if p.position in pos_counts else "WR"
                 pos_counts[pos] += 1
-            
             for pos, count in pos_counts.items():
-                alloc_data.append({
-                    "Team": t.team_name,
-                    "Position": pos,
-                    "Count": count
-                })
+                alloc_data.append({"Team": t.team_name, "Position": pos, "Count": count})
 
         df_alloc = pd.DataFrame(alloc_data)
-
-        import plotly.express as px
         fig_alloc = px.bar(
             df_alloc,
             x="Count",
@@ -1841,49 +1851,22 @@ elif active_page == "Positional Economy":
             color="Position",
             orientation="h",
             color_discrete_map={
-                "QB": "#E11D48",
-                "RB": "#0F766E",
-                "WR": "#2563EB",
-                "TE": "#D97706",
-                "K": "#64748B",
-                "D/ST": "#475569"
+                "QB": "#E11D48", "RB": "#0F766E", "WR": "#2563EB",
+                "TE": "#D97706", "K": "#64748B", "D/ST": "#475569"
             }
         )
         fig_alloc.update_layout(
-    # 1. Expand the left margin so full team names fit comfortably
-        margin=dict(l=160, r=40, t=40, b=40),
-    
-    # 2. Force y-axis labels to be fully visible, solid black, and auto-spaced
-        yaxis=dict(
-        automargin=True,
-        tickfont=dict(color="#000000", size=12),
-        title=None,          # Removes redundant y-axis title if present
-        color="#000000",
-        showticklabels=True
-        ),
-    
-    # 3. Ensure x-axis stays cleanly formatted
-        xaxis=dict(
-        title=dict(text="Total Rostered Players", font=dict(color="#000000")),
-        tickfont=dict(color="#000000"),
-        color="#000000"
-        ),
-    
-    # 4. Clean white background and black fonts throughout
-        paper_bgcolor="#FFFFFF",
-        plot_bgcolor="#FFFFFF",
-        font=dict(color="#000000")
-    )
-
+            margin=dict(l=160, r=40, t=40, b=40),
+            yaxis=dict(automargin=True, tickfont=dict(color="#000000", size=12), title=None, color="#000000", showticklabels=True),
+            xaxis=dict(title=dict(text="Total Rostered Players", font=dict(color="#000000")), tickfont=dict(color="#000000"), color="#000000"),
+            paper_bgcolor="#FFFFFF",
+            plot_bgcolor="#FFFFFF",
+            font=dict(color="#000000")
+        )
         st.plotly_chart(fig_alloc, theme=None, width="stretch")
 
-    
-    # ---------------------------------------------------------
-    # TAB 2: CAPITAL PRODUCTIVITY (STARTERS VS BENCH)
-    # ---------------------------------------------------------
     with tab_efficiency:
         st.markdown("<div class='meta-caption'>Points Extracted: Starters vs. Stranded Bench Capital</div>", unsafe_allow_html=True)
-
         eff_rows = []
         for t in league.teams:
             starter_pts = sum(getattr(p, "total_points", 0) for p in t.roster if getattr(p, "lineupSlot", "BE") != "BE")
@@ -1900,7 +1883,6 @@ elif active_page == "Positional Economy":
             })
 
         df_eff = pd.DataFrame(eff_rows)
-
         fig_eff = px.scatter(
             df_eff,
             x="Bench Pts",
@@ -1910,48 +1892,21 @@ elif active_page == "Positional Economy":
             text="Team",
             color_continuous_scale=["#CBD5E1", "#0F766E"]
         )
-
-        # Force team labels above dots to stay black
-        fig_eff.update_traces(
-            textposition="top center",
-            textfont=dict(color="#000000", size=11)
-        )
-
+        fig_eff.update_traces(textposition="top center", textfont=dict(color="#000000", size=11))
         fig_eff.update_layout(
             height=450,
             paper_bgcolor="#FFFFFF",
             plot_bgcolor="#FFFFFF",
             margin=dict(l=60, r=40, t=40, b=50),
             font=dict(color="#000000"),
-            xaxis=dict(
-                showgrid=True,
-                gridcolor="#E2E8F0",
-                linecolor="#000000",
-                color="#000000",
-                tickfont=dict(color="#000000"),
-                title=dict(text="Stranded Bench Points", font=dict(color="#000000"))
-            ),
-            yaxis=dict(
-                showgrid=True,
-                gridcolor="#E2E8F0",
-                linecolor="#000000",
-                color="#000000",
-                tickfont=dict(color="#000000"),
-                title=dict(text="Active Starting Points", font=dict(color="#000000"))
-            ),
-            coloraxis_colorbar=dict(
-                title=dict(text="Efficiency %", font=dict(color="#000000")),
-                tickfont=dict(color="#000000")
-            )
+            xaxis=dict(showgrid=True, gridcolor="#E2E8F0", linecolor="#000000", color="#000000", tickfont=dict(color="#000000"), title=dict(text="Stranded Bench Points", font=dict(color="#000000"))),
+            yaxis=dict(showgrid=True, gridcolor="#E2E8F0", linecolor="#000000", color="#000000", tickfont=dict(color="#000000"), title=dict(text="Active Starting Points", font=dict(color="#000000"))),
+            coloraxis_colorbar=dict(title=dict(text="Efficiency %", font=dict(color="#000000")), tickfont=dict(color="#000000"))
         )
-
         st.plotly_chart(fig_eff, theme=None, width="stretch")
-    # ---------------------------------------------------------
-    # TAB 3: WAIVER LIQUIDITY & ACQUISITION VELOCITY
-    # ---------------------------------------------------------
+
     with tab_liquidity:
         st.markdown("<div class='meta-caption'>Market Aggression: Moves Made vs. Offensive Output</div>", unsafe_allow_html=True)
-
         liq_rows = []
         for t in league.teams:
             moves = getattr(t, "acquisitions", 0)
@@ -1968,8 +1923,6 @@ elif active_page == "Positional Economy":
             })
 
         df_liq = pd.DataFrame(liq_rows)
-
-        # Bubble size reflects Wins, color maps to Total Moves
         fig_liq = px.scatter(
             df_liq,
             x="Acquisitions",
@@ -1980,48 +1933,21 @@ elif active_page == "Positional Economy":
             color_continuous_scale=["#94A3B8", "#0F766E"],
             hover_data=["Trades", "FAAB Spent", "Wins"]
         )
-
-        # Force team bubble labels to stay solid black
-        fig_liq.update_traces(
-            textposition="top center",
-            textfont=dict(color="#000000", size=11)
-        )
-
+        fig_liq.update_traces(textposition="top center", textfont=dict(color="#000000", size=11))
         fig_liq.update_layout(
             height=450,
             paper_bgcolor="#FFFFFF",
             plot_bgcolor="#FFFFFF",
             margin=dict(l=60, r=40, t=40, b=50),
             font=dict(color="#000000"),
-            xaxis=dict(
-                showgrid=True,
-                gridcolor="#E2E8F0",
-                linecolor="#000000",
-                color="#000000",
-                tickfont=dict(color="#000000"),
-                title=dict(text="Waiver Claims / Roster Adds", font=dict(color="#000000"))
-            ),
-            yaxis=dict(
-                showgrid=True,
-                gridcolor="#E2E8F0",
-                linecolor="#000000",
-                color="#000000",
-                tickfont=dict(color="#000000"),
-                title=dict(text="Total Points For (PF)", font=dict(color="#000000"))
-            ),
-            coloraxis_colorbar=dict(
-                title=dict(text="Total Moves", font=dict(color="#000000")),
-                tickfont=dict(color="#000000")
-            )
+            xaxis=dict(showgrid=True, gridcolor="#E2E8F0", linecolor="#000000", color="#000000", tickfont=dict(color="#000000"), title=dict(text="Waiver Claims / Roster Adds", font=dict(color="#000000"))),
+            yaxis=dict(showgrid=True, gridcolor="#E2E8F0", linecolor="#000000", color="#000000", tickfont=dict(color="#000000"), title=dict(text="Total Points For (PF)", font=dict(color="#000000"))),
+            coloraxis_colorbar=dict(title=dict(text="Total Moves", font=dict(color="#000000")), tickfont=dict(color="#000000"))
         )
-
         st.plotly_chart(fig_liq, theme=None, width="stretch")
-    # ---------------------------------------------------------
-    # TAB 4: VORP SCARCITY CURVES
-    # ---------------------------------------------------------
+
     with tab_scarcity:
         st.markdown("<div class='meta-caption'>Positional Output Cliffs (Ranked 1-24)</div>", unsafe_allow_html=True)
-
         all_players = []
         for t in league.teams:
             for p in t.roster:
@@ -2029,7 +1955,6 @@ elif active_page == "Positional Economy":
                     all_players.append({"Player": p.name, "Pos": p.position, "Pts": p.total_points})
 
         df_players = pd.DataFrame(all_players)
-        
         ranked_frames = []
         for pos in ["RB", "WR", "QB", "TE"]:
             sub = df_players[df_players["Pos"] == pos].sort_values("Pts", ascending=False).reset_index(drop=True)
@@ -2038,7 +1963,6 @@ elif active_page == "Positional Economy":
 
         if ranked_frames:
             df_vorp = pd.concat(ranked_frames)
-
             fig_vorp = px.line(
                 df_vorp,
                 x="Position Rank",
@@ -2046,40 +1970,17 @@ elif active_page == "Positional Economy":
                 color="Pos",
                 line_shape="spline",
                 color_discrete_map={
-                    "QB": "#E11D48",
-                    "RB": "#0F766E",
-                    "WR": "#2563EB",
-                    "TE": "#D97706"
+                    "QB": "#E11D48", "RB": "#0F766E", "WR": "#2563EB", "TE": "#D97706"
                 }
             )
-
             fig_vorp.update_layout(
                 height=420,
                 paper_bgcolor="#FFFFFF",
                 plot_bgcolor="#FFFFFF",
                 margin=dict(l=60, r=40, t=40, b=50),
                 font=dict(color="#000000"),
-                legend=dict(
-                    font=dict(color="#000000"),
-                    title=dict(font=dict(color="#000000")),
-                    bgcolor="rgba(255, 255, 255, 0.9)"
-                ),
-                xaxis=dict(
-                    showgrid=True,
-                    gridcolor="#E2E8F0",
-                    linecolor="#000000",
-                    color="#000000",
-                    tickfont=dict(color="#000000"),
-                    title=dict(text="Position Rank (Top 24)", font=dict(color="#000000"))
-                ),
-                yaxis=dict(
-                    showgrid=True,
-                    gridcolor="#E2E8F0",
-                    linecolor="#000000",
-                    color="#000000",
-                    tickfont=dict(color="#000000"),
-                    title=dict(text="Total Points Scored", font=dict(color="#000000"))
-                )
+                legend=dict(font=dict(color="#000000"), title=dict(font=dict(color="#000000")), bgcolor="rgba(255, 255, 255, 0.9)"),
+                xaxis=dict(showgrid=True, gridcolor="#E2E8F0", linecolor="#000000", color="#000000", tickfont=dict(color="#000000"), title=dict(text="Position Rank (Top 24)", font=dict(color="#000000"))),
+                yaxis=dict(showgrid=True, gridcolor="#E2E8F0", linecolor="#000000", color="#000000", tickfont=dict(color="#000000"), title=dict(text="Total Points Scored", font=dict(color="#000000")))
             )
-
             st.plotly_chart(fig_vorp, theme=None, width="stretch")
