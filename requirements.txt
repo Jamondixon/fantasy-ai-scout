@@ -4,3 +4,4 @@ espn-api
 google-genai
 pydantic
 Plotly
+streamlit-local-storage
